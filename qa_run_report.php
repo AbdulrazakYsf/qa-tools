@@ -58,7 +58,7 @@ try {
         }
         $byTool[$code]['rows'][] = $row;
         $status = strtoupper($row['status']);
-        if ($status === 'OK' || $status === 'PASS' || $status === 'PASSED') {
+        if ($status === 'OK' || $status === 'PASS' || $status === 'PASSED' || $status === 'VALID' || $status === 'SUCCESS' || $status === 'IN STOCK') {
             $byTool[$code]['passed']++;
         } elseif ($status === 'WARN' || $status === 'WARNING') {
             $byTool[$code]['warn']++;
@@ -408,7 +408,7 @@ body {
                         <?php foreach ($toolData['rows'] as $row): 
                             $status = strtoupper($row['status']);
                             $badgeClass = 'fail';
-                            if ($status === 'OK' || $status === 'PASS' || $status === 'PASSED') $badgeClass = 'ok';
+                            if ($status === 'OK' || $status === 'PASS' || $status === 'PASSED' || $status === 'VALID' || $status === 'SUCCESS' || $status === 'IN STOCK') $badgeClass = 'ok';
                             elseif ($status === 'WARN' || $status === 'WARNING') $badgeClass = 'warn';
                         ?>
                         <tr>
