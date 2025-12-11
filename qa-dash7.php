@@ -327,6 +327,343 @@ function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'
 </html>
 
 ADD_TO_CART_HTML,
+    'speed_test' => <<<'SPEED_TEST_HTML'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Speed Test (TTFB)</title>
+<style>
+  :root{--bg:#f4f7fa;--card:#fff;--blue:#1E88E5;--green:#43A047;--red:#E53935;}
+  body{font-family:system-ui,sans-serif;margin:0;padding:20px;background:var(--bg);color:#333;}
+  .container{max-width:800px;margin:0 auto;background:var(--card);padding:20px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);}
+  h1{margin-top:0;color:var(--blue);font-size:20px;}
+  textarea{width:100%;height:120px;padding:10px;border:1px solid #ddd;border-radius:4px;margin:10px 0;font-family:monospace;}
+  button{background:var(--blue);color:#fff;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-weight:600;}
+  button:hover{opacity:0.9;}
+  .results{margin-top:20px;}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;}
+  th{background:#f8f9fa;font-weight:600;}
+  .badge{padding:2px 6px;border-radius:4px;font-size:11px;font-weight:bold;color:#fff;}
+  .ok{background:var(--green);}
+  .slow{background:#FB8C00;}
+  .err{background:var(--red);}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Network Speed Test (TTFB & Download)</h1>
+  <p>Enter URLs to test (one per line). Measures Time to First Byte and Total Duration.</p>
+  <textarea id="input" placeholder="https://www.google.com&#10;https://www.example.com"></textarea>
+  <button onclick="run()">Run Speed Test</button>
+  <div class="results">
+    <table id="table">
+      <thead><tr><th>URL</th><th>Status</th><th>TTFB (ms)</th><th>Total (ms)</th><th>Size (B)</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+<script>
+async function run(){
+  const urls = document.getElementById('input').value.trim().split(/\n/).map(s=>s.trim()).filter(Boolean);
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  
+  for(const url of urls){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${url}</td><td>Testing...</td><td>-</td><td>-</td><td>-</td>`;
+    tbody.appendChild(tr);
+    
+    const start = performance.now();
+    try {
+      const resp = await fetch(url, {cache: 'no-store'});
+      const ttfb = Math.round(performance.now() - start);
+      const blob = await resp.blob();
+      const total = Math.round(performance.now() - start);
+      
+      const status = resp.ok ? (ttfb < 500 ? 'FAST' : 'SLOW') : 'ERR';
+      const badge = resp.ok ? (ttfb < 500 ? 'ok' : 'slow') : 'err';
+      
+      tr.innerHTML = `
+        <td><a href="${url}" target="_blank">${url}</a></td>
+        <td><span class="badge ${badge}">${resp.status} ${status}</span></td>
+        <td>${ttfb}</td>
+        <td>${total}</td>
+        <td>${blob.size}</td>`;
+    } catch(e) {
+      tr.innerHTML = `<td>${url}</td><td><span class="badge err">FAIL</span></td><td colspan="3">${e.message}</td>`;
+    }
+  }
+}
+</script>
+</body>
+</html>
+SPEED_TEST_HTML,
+    'link_extractor' => <<<'LINK_EXTRACTOR_HTML'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Link Extractor</title>
+<style>
+  :root{--bg:#f4f7fa;--card:#fff;--blue:#1E88E5;--green:#43A047;--red:#E53935;}
+  body{font-family:system-ui,sans-serif;margin:0;padding:20px;background:var(--bg);color:#333;}
+  .container{max-width:800px;margin:0 auto;background:var(--card);padding:20px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);}
+  h1{margin-top:0;color:var(--blue);font-size:20px;}
+  textarea{width:100%;height:120px;padding:10px;border:1px solid #ddd;border-radius:4px;margin:10px 0;font-family:monospace;}
+  button{background:var(--blue);color:#fff;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-weight:600;}
+  button:hover{opacity:0.9;}
+  .results{margin-top:20px;max-height:400px;overflow:auto;background:#f9f9f9;padding:10px;border:1px solid #eee;}
+  .url-group{margin-bottom:14px;border-bottom:1px solid #eee;padding-bottom:10px;}
+  .url-header{font-weight:bold;color:#455a64;margin-bottom:6px;}
+  ul{margin:0;padding-left:20px;}
+  li{font-size:13px;word-break:break-all;}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Link Extractor</h1>
+  <p>Extracts all href links from the provided URLs (Note: CORS may block cross-origin requests).</p>
+  <textarea id="input" placeholder="https://www.jarir.com/sa-en/"></textarea>
+  <button onclick="run()">Extract Links</button>
+  <div class="results" id="output"></div>
+</div>
+<script>
+async function run(){
+  const urls = document.getElementById('input').value.trim().split(/\n/).map(s=>s.trim()).filter(Boolean);
+  const out = document.getElementById('output');
+  out.innerHTML = 'Processing...';
+  
+  let html = '';
+  for(const url of urls){
+    html += `<div class="url-group"><div class="url-header">${url}</div><ul>`;
+    try {
+      const resp = await fetch(url);
+      const text = await resp.text();
+      // Simple regex for hrefs
+      const matches = text.match(/href=["'](.*?)["']/g) || [];
+      const links = matches.map(m => m.replace(/href=["']|["']/g, '')).filter(l => l && !l.startsWith('#') && !l.startsWith('javascript:'));
+      
+      if(links.length){
+        html += links.map(l => `<li><a href="${l}" target="_blank">${l}</a></li>`).join('');
+        html += `<li><strong>Found: ${links.length} links</strong></li>`;
+      } else {
+        html += `<li>No links found (or blocked).</li>`;
+      }
+    } catch(e) {
+      html += `<li style="color:red">Error: ${e.message}</li>`;
+    }
+    html += `</ul></div>`;
+  }
+  out.innerHTML = html || 'No results.';
+}
+</script>
+</body>
+</html>
+LINK_EXTRACTOR_HTML,
+    'asset_count' => <<<'ASSET_COUNT_HTML'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asset Counter</title>
+<style>
+  :root{--bg:#f4f7fa;--card:#fff;--blue:#1E88E5;--green:#43A047;--purple:#7B1FA2;}
+  body{font-family:system-ui,sans-serif;margin:0;padding:20px;background:var(--bg);color:#333;}
+  .container{max-width:800px;margin:0 auto;background:var(--card);padding:20px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);}
+  h1{margin-top:0;color:var(--blue);font-size:20px;}
+  textarea{width:100%;height:120px;padding:10px;border:1px solid #ddd;border-radius:4px;margin:10px 0;font-family:monospace;}
+  button{background:var(--blue);color:#fff;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-weight:600;}
+  table{width:100%;border-collapse:collapse;margin-top:20px;font-size:14px;}
+  th,td{padding:10px;border-bottom:1px solid #eee;text-align:left;}
+  th{background:#f8f9fa;}
+  .count-badge{padding:4px 8px;background:#eee;border-radius:12px;font-weight:bold;font-size:12px;}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Asset Counter</h1>
+  <p>Counts images, scripts, and stylesheets found in the source of the provided URLs.</p>
+  <textarea id="input" placeholder="https://www.jarir.com/sa-en/"></textarea>
+  <button onclick="run()">Count Assets</button>
+  <div class="results">
+    <table id="table">
+      <thead><tr><th>URL</th><th>Images</th><th>Scripts</th><th>CSS</th><th>Size (KB)</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+<script>
+async function run(){
+  const urls = document.getElementById('input').value.trim().split(/\n/).map(s=>s.trim()).filter(Boolean);
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  
+  for(const url of urls){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${url}</td><td colspan="4">Fetching...</td>`;
+    tbody.appendChild(tr);
+    
+    try {
+      const resp = await fetch(url);
+      const text = await resp.text();
+      
+      const imgs = (text.match(/<img\s/g) || []).length;
+      const scripts = (text.match(/<script/g) || []).length;
+      const css = (text.match(/<link\s[^>]*rel=["']stylesheet["']/g) || []).length;
+      const size = Math.round(text.length / 1024);
+      
+      tr.innerHTML = `
+        <td><a href="${url}" target="_blank">${url}</a></td>
+        <td><span class="count-badge" style="background:#e3f2fd;color:#1565C0">${imgs}</span></td>
+        <td><span class="count-badge" style="background:#fff3e0;color:#E65100">${scripts}</span></td>
+        <td><span class="count-badge" style="background:#f3e5f5;color:#4A148C">${css}</span></td>
+        <td>${size} KB</td>`;
+    } catch(e) {
+      tr.innerHTML = `<td>${url}</td><td colspan="4" style="color:red">Error: ${e.message}</td>`;
+    }
+  }
+}
+</script>
+</body>
+</html>
+ASSET_COUNT_HTML,
+    'json_validator' => <<<'JSON_VALIDATOR_HTML'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Syntax Validator</title>
+<style>
+  :root{--bg:#f4f7fa;--card:#fff;--blue:#1E88E5;--green:#43A047;--red:#E53935;}
+  body{font-family:system-ui,sans-serif;margin:0;padding:20px;background:var(--bg);color:#333;}
+  .container{max-width:800px;margin:0 auto;background:var(--card);padding:20px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);}
+  h1{margin-top:0;color:var(--blue);font-size:20px;}
+  textarea{width:100%;height:150px;padding:10px;border:1px solid #ddd;border-radius:4px;margin:10px 0;font-family:monospace;}
+  button{background:var(--blue);color:#fff;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-weight:600;}
+  .status{margin-top:15px;padding:10px;border-radius:4px;display:none;}
+  .valid{background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;}
+  .invalid{background:#ffebee;color:#c62828;border:1px solid #ffcdd2;}
+  pre{background:#f5f5f5;padding:10px;overflow:auto;max-height:300px;border-radius:4px;}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>JSON Syntax Validator</h1>
+  <p>Paste JSON content or enter a URL to fetch and validate.</p>
+  <textarea id="input" placeholder='{"key": "value"} or https://api.example.com/data.json'></textarea>
+  <button onclick="run()">Validate JSON</button>
+  <div id="msg" class="status"></div>
+  <pre id="output" style="display:none"></pre>
+</div>
+<script>
+async function run(){
+  const input = document.getElementById('input').value.trim();
+  const msg = document.getElementById('msg');
+  const out = document.getElementById('output');
+  
+  msg.style.display = 'none';
+  out.style.display = 'none';
+  
+  if(!input) return;
+  
+  let jsonStr = input;
+  
+  // If URL
+  if(/^https?:\/\//.test(input)){
+    try {
+      const resp = await fetch(input);
+      jsonStr = await resp.text();
+    } catch(e) {
+      msg.textContent = 'Fetch Error: ' + e.message;
+      msg.className = 'status invalid';
+      msg.style.display = 'block';
+      return;
+    }
+  }
+  
+  try {
+    const obj = JSON.parse(jsonStr);
+    msg.textContent = '✅ Valid JSON';
+    msg.className = 'status valid';
+    msg.style.display = 'block';
+    out.textContent = JSON.stringify(obj, null, 2);
+    out.style.display = 'block';
+  } catch(e) {
+    msg.textContent = '❌ Invalid JSON: ' + e.message;
+    msg.className = 'status invalid';
+    msg.style.display = 'block';
+  }
+}
+</script>
+</body>
+</html>
+JSON_VALIDATOR_HTML,
+    'headers_check' => <<<'HEADERS_CHECK_HTML'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Headers Inspector</title>
+<style>
+  :root{--bg:#f4f7fa;--card:#fff;--blue:#1E88E5;--green:#43A047;--red:#E53935;}
+  body{font-family:system-ui,sans-serif;margin:0;padding:20px;background:var(--bg);color:#333;}
+  .container{max-width:800px;margin:0 auto;background:var(--card);padding:20px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);}
+  h1{margin-top:0;color:var(--blue);font-size:20px;}
+  textarea{width:100%;height:100px;padding:10px;border:1px solid #ddd;border-radius:4px;margin:10px 0;font-family:monospace;}
+  button{background:var(--blue);color:#fff;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;font-weight:600;}
+  .results{margin-top:20px;}
+  .header-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;}
+  .header-table th{background:#eee;text-align:left;padding:8px;}
+  .header-table td{border-bottom:1px solid #eee;padding:6px;word-break:break-all;}
+  .key{font-weight:bold;color:#455a64;width:30%;}
+  .status-line{padding:10px;background:#f8f9fa;font-weight:bold;border-left:4px solid #ccc;margin-bottom:10px;}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Headers Inspector</h1>
+  <p>Fetch URLs (HEAD request) and inspect response headers.</p>
+  <textarea id="input" placeholder="https://www.jarir.com"></textarea>
+  <button onclick="run()">Inspect Headers</button>
+  <div id="output" class="results"></div>
+</div>
+<script>
+async function run(){
+  const urls = document.getElementById('input').value.trim().split(/\n/).map(s=>s.trim()).filter(Boolean);
+  const out = document.getElementById('output');
+  out.innerHTML = '';
+  
+  for(const url of urls){
+    const div = document.createElement('div');
+    div.innerHTML = `<div class="status-line">Fetching ${url}...</div>`;
+    out.appendChild(div);
+    
+    try {
+      const resp = await fetch(url, {method: 'HEAD'});
+      let html = `<div class="status-line" style="border-color:${resp.ok?'#43A047':'#E53935'}">${resp.status} ${resp.statusText}</div>`;
+      html += `<table class="header-table"><tr><th>Header</th><th>Value</th></tr>`;
+      
+      for(const [key, val] of resp.headers){
+        html += `<tr><td class="key">${key}</td><td>${val}</td></tr>`;
+      }
+      html += `</table>`;
+      div.innerHTML = html;
+    } catch(e) {
+      div.innerHTML = `<div class="status-line" style="border-color:#E53935">Error: ${e.message}</div>`;
+    }
+  }
+}
+</script>
+</body>
+</html>
+HEADERS_CHECK_HTML,
     'brand' => <<<'BRAND_HTML'
 <!DOCTYPE html>
 <html lang="en">
@@ -5115,6 +5452,11 @@ $TOOL_DEFS = [
     ['code' => 'stock',           'name' => 'Stock / Availability'],
     ['code' => 'sub_category',    'name' => 'Subcategories'],
     ['code' => 'add_to_cart',     'name' => 'Add to Cart'],
+    ['code' => 'speed_test',      'name' => 'Speed Test'],
+    ['code' => 'link_extractor',  'name' => 'Link Extractor'],
+    ['code' => 'asset_count',     'name' => 'Asset Counter'],
+    ['code' => 'json_validator',  'name' => 'JSON Validator'],
+    ['code' => 'headers_check',   'name' => 'Headers Inspector'],
 ];
 
 ?>
@@ -5284,28 +5626,28 @@ body{margin:0;background:var(--bg);color:#263238;}
 
     <div class="stats-row">
       <!-- Total -->
-      <div class="stat-card" style="border-top: 4px solid #1E88E5; cursor:pointer;" onclick="setRunFilter('')">
-        <label>Total Test Runs</label>
-        <div class="value" id="stat-total">0</div>
-        <div class="sub">All time</div>
+      <div class="stat-card stat-total" style="border-top: 4px solid #1E88E5; cursor:pointer;" onclick="setRunFilter('')">
+        <h3>Total Test Runs</h3>
+        <div class="stat-value" id="stat-total">0</div>
+        <div class="stat-meta">All time</div>
       </div>
       <!-- Passed -->
-      <div class="stat-card" style="border-top: 4px solid #43A047; cursor:pointer;" onclick="setRunFilter('passed')">
-        <label>Passed</label>
-        <div class="value" id="stat-passed">0</div>
-        <div class="sub">Runs marked as passed</div>
+      <div class="stat-card stat-pass" style="border-top: 4px solid #43A047; cursor:pointer;" onclick="setRunFilter('passed')">
+        <h3>Passed</h3>
+        <div class="stat-value" id="stat-passed">0</div>
+        <div class="stat-meta">Runs marked as passed</div>
       </div>
       <!-- Failed -->
-      <div class="stat-card" style="border-top: 4px solid #E53935; cursor:pointer;" onclick="setRunFilter('failed')">
-        <label>Failed</label>
-        <div class="value" id="stat-failed">0</div>
-        <div class="sub">Runs marked as failed</div>
+      <div class="stat-card stat-fail" style="border-top: 4px solid #E53935; cursor:pointer;" onclick="setRunFilter('failed')">
+        <h3>Failed</h3>
+        <div class="stat-value" id="stat-failed">0</div>
+        <div class="stat-meta">Runs marked as failed</div>
       </div>
       <!-- Open Issues -->
-      <div class="stat-card" style="border-top: 4px solid #FB8C00; cursor:pointer;" onclick="setRunFilter('failed')">
-        <label>Open Issues</label>
-        <div class="value" id="stat-open">0</div>
-        <div class="sub">Total open issues across runs</div>
+      <div class="stat-card stat-open" style="border-top: 4px solid #FB8C00; cursor:pointer;" onclick="setRunFilter('failed')">
+        <h3>Open Issues</h3>
+        <div class="stat-value" id="stat-open">0</div>
+        <div class="stat-meta">Total open issues across runs</div>
       </div>
     </div>
 
