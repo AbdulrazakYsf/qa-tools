@@ -4190,7 +4190,7 @@ SKU_HTML,
    background:#e0e0e0;color:#333;text-transform:uppercase;letter-spacing:.5px;
  }
  .instock .status-chip{background:#d5f7d5;color:#096b09}
- .oos .status-chip{background:#ffe3c4;color:#8d4a00}
+ .oos .status-chip{background:#ffd4d4;color:#a10000}
  .error .status-chip{background:#ffd4d4;color:#a10000}
  .meta{font-size:12.5px;color:#555;margin-top:2px}
  #empty{display:none;color:#d00;font-weight:600;margin-top:6px}
