@@ -2759,7 +2759,7 @@ async function run(){
           status,
           message,
           url: username,    // for report
-          parent: store     // for report
+          parent: map.store // for report
         });
       }catch(e){
         attempts.push({
@@ -2770,7 +2770,7 @@ async function run(){
           status:'ERROR',
           message: String(e),
           url: username,
-          parent: store
+          parent: map?.store || '?'
         });
       }
       render(); // live update
