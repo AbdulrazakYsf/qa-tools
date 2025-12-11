@@ -5282,26 +5282,30 @@ body{margin:0;background:var(--bg);color:#263238;}
       </div>
     </div>
 
-    <div class="card-row">
-      <div class="stat-card stat-total">
-        <h3>Total Test Runs</h3>
-        <div class="stat-value" id="stat-total">0</div>
-        <div class="stat-meta">All time</div>
+    <div class="stats-row">
+      <!-- Total -->
+      <div class="stat-card" style="border-top: 4px solid #1E88E5; cursor:pointer;" onclick="setRunFilter('')">
+        <label>Total Test Runs</label>
+        <div class="value" id="stat-total">0</div>
+        <div class="sub">All time</div>
       </div>
-      <div class="stat-card stat-pass">
-        <h3>Passed</h3>
-        <div class="stat-value" id="stat-passed">0</div>
-        <div class="stat-meta">Runs marked as passed</div>
+      <!-- Passed -->
+      <div class="stat-card" style="border-top: 4px solid #43A047; cursor:pointer;" onclick="setRunFilter('passed')">
+        <label>Passed</label>
+        <div class="value" id="stat-passed">0</div>
+        <div class="sub">Runs marked as passed</div>
       </div>
-      <div class="stat-card stat-fail">
-        <h3>Failed</h3>
-        <div class="stat-value" id="stat-failed">0</div>
-        <div class="stat-meta">Runs marked as failed</div>
+      <!-- Failed -->
+      <div class="stat-card" style="border-top: 4px solid #E53935; cursor:pointer;" onclick="setRunFilter('failed')">
+        <label>Failed</label>
+        <div class="value" id="stat-failed">0</div>
+        <div class="sub">Runs marked as failed</div>
       </div>
-      <div class="stat-card stat-open">
-        <h3>Open Issues</h3>
-        <div class="stat-value" id="stat-open">0</div>
-        <div class="stat-meta">Total open issues across runs</div>
+      <!-- Open Issues -->
+      <div class="stat-card" style="border-top: 4px solid #FB8C00; cursor:pointer;" onclick="setRunFilter('failed')">
+        <label>Open Issues</label>
+        <div class="value" id="stat-open">0</div>
+        <div class="sub">Total open issues across runs</div>
       </div>
     </div>
 
@@ -6155,7 +6159,7 @@ function downloadRunsCSV(){
       csvRows.push(row.join(','));
   });
 
-  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+  const blob = new Blob(['\uFEFF' + csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.setAttribute('hidden', '');
@@ -6165,6 +6169,16 @@ function downloadRunsCSV(){
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+function setRunFilter(status){
+  const sel = document.getElementById('filter-status');
+  if(sel){
+      sel.value = status;
+      applyRunFilters();
+      // Scroll to table
+      document.getElementById('runs-table').scrollIntoView({behavior: 'smooth'});
+  }
 }
 
 /* Test runs */
