@@ -5224,7 +5224,8 @@ body{margin:0;background:var(--bg);color:#263238;}
   .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #666; }
 
   /* Fullscreen Console Mode */
-  .console-mode .app-shell > *:not(#console-overlay) { display: none !important; }
+  /* Fullscreen Console Mode */
+  .console-mode .app-shell { display: none !important; }
   #console-overlay { display: none; }
   .console-mode #console-overlay { display: block; height: 100vh; padding: 20px; box-sizing: border-box; }
   .console-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
@@ -5314,29 +5315,7 @@ body{margin:0;background:var(--bg);color:#263238;}
       </div>
     </div>
     
-    <!-- CONSOLE OVERLAY (Focus Mode) -->
-    <div id="console-overlay">
-       <div class="section-card" style="height:100%; display:flex; flex-direction:column;">
-         <div class="console-header">
-           <h2>Test Execution Log</h2>
-           <button class="btn-ghost" onclick="exitConsoleMode()">Close Console</button>
-         </div>
-         <div id="dash-console" class="run-console"></div>
-       </div>
-    </div>
 
-    <!-- MODAL FOR TOOLS -->
-    <div class="modal-overlay" id="tool-modal">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 id="modal-title">Tool Name</h3>
-          <button class="modal-close" onclick="closeToolModal()">&times;</button>
-        </div>
-        <div class="modal-body">
-           <iframe id="tool-iframe" class="modal-iframe"></iframe>
-        </div>
-      </div>
-    </div>
 
     <!-- Manual logging of test runs -->
     <div class="section-card">
@@ -5503,6 +5482,30 @@ body{margin:0;background:var(--bg);color:#263238;}
       </table>
     </div>
   </section>
+</div>
+
+<!-- CONSOLE OVERLAY (Focus Mode) -->
+<div id="console-overlay">
+   <div class="section-card" style="height:100%; display:flex; flex-direction:column;">
+     <div class="console-header">
+       <h2>Test Execution Log</h2>
+       <button class="btn-ghost" onclick="exitConsoleMode()">Close Console</button>
+     </div>
+     <div id="dash-console" class="run-console"></div>
+   </div>
+</div>
+
+<!-- MODAL FOR TOOLS -->
+<div class="modal-overlay" id="tool-modal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="modal-title">Tool Name</h3>
+      <button class="modal-close" onclick="closeToolModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+       <iframe id="tool-iframe" class="modal-iframe"></iframe>
+    </div>
+  </div>
 </div>
 
 <script>
