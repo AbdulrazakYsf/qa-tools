@@ -5347,6 +5347,10 @@ body{margin:0;background:var(--bg);color:#263238;}
           </select>
         </div>
         <div style="flex:1;"></div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+            <div style="font-size:13px; color:#555; font-weight:600;">Total Runs: <span id="filtered-total">0</span></div>
+            <button class="btn-small btn-secondary" onclick="downloadRunsCSV()">Export CSV</button>
+        </div>
       </div>
 
       <table class="table" id="runs-table">
@@ -6107,7 +6111,59 @@ function applyRunFilters(){
       }
       return true;
   });
+  document.getElementById('filtered-total').textContent = filtered.length;
   renderRunsTable(filtered);
+}
+
+function downloadRunsCSV(){
+  const st = document.getElementById('filter-status').value.toLowerCase();
+  const tc = document.getElementById('filter-tool').value;
+  
+  // Re-filter to ensure we export what is seen (or we could store filtered state)
+  const filtered = RUNS.filter(r => {
+      if(st && (r.status||'').toLowerCase() !== st) return false;
+      if(tc){
+          const runTools = (r.tools||'').split(',');
+          if(!runTools.includes(tc)) return false;
+      }
+      return true;
+  });
+
+  if(!filtered.length){
+      alert('No runs to export');
+      return;
+  }
+
+  // Header
+  const headers = ['ID','Date','Status','Tools','Total Tests','Passed','Failed','Open Issues','Notes'];
+  const csvRows = [headers.join(',')];
+
+  filtered.forEach(r => {
+      const tools = (r.tools || '').replace(/,/g, ';'); // escape commas
+      const note = (r.notes || '').replace(/"/g, '""');
+      const row = [
+          r.id,
+          r.run_date,
+          r.status,
+          `"${tools}"`,
+          r.total_tests,
+          r.passed,
+          r.failed,
+          r.open_issues,
+          `"${note}"`
+      ];
+      csvRows.push(row.join(','));
+  });
+
+  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.setAttribute('hidden', '');
+  a.setAttribute('href', url);
+  a.setAttribute('download', 'test_runs_export.csv');
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 /* Test runs */
