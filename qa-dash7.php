@@ -6189,8 +6189,7 @@ document.querySelector('#runs-table').addEventListener('click', async (e)=>{
   await showRunDetails(runId);
 });
 
-  await Promise.all([loadRuns(), loadStats()]);
-});
+
 
 /* Configs */
 async function loadConfigs(){
