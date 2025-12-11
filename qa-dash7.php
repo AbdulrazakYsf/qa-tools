@@ -4988,7 +4988,12 @@ if (isset($_GET['api'])) {
 
             /* Test runs – manual logging only (no wiring to tools) */
             case 'list-runs':
-                $stmt = $db->query("SELECT * FROM qa_test_runs ORDER BY run_date DESC LIMIT 50");
+                $sql = "SELECT tr.*, GROUP_CONCAT(DISTINCT rr.tool_code) as tools 
+                        FROM qa_test_runs tr 
+                        LEFT JOIN qa_run_results rr ON tr.id = rr.run_id 
+                        GROUP BY tr.id 
+                        ORDER BY tr.run_date DESC LIMIT 100";
+                $stmt = $db->query($sql);
                 echo json_encode($stmt->fetchAll());
                 break;
 
@@ -5322,39 +5327,26 @@ body{margin:0;background:var(--bg);color:#263238;}
     <!-- Manual logging of test runs -->
     <div class="section-card">
       <div class="section-header">
-        <h2>Log Test Run</h2>
-        <small>Manual summary after running tools</small>
+        <h2>Recent Test Runs</h2>
+        <small>History of automated execution</small>
       </div>
-      <div class="log-form">
-        <div class="form-field">
-          <label>Status</label>
-          <select id="run-status">
+      <div class="actions-row" style="margin-bottom:14px; background:#f8fafc; padding:12px; border-radius:8px; display:flex; gap:16px;">
+        <div class="form-field" style="width:150px;">
+          <label>Filter by Status</label>
+          <select id="filter-status">
+            <option value="">All Statuses</option>
             <option value="passed">Passed</option>
             <option value="failed">Failed</option>
-            <option value="partial">Partial</option>
           </select>
         </div>
-        <div class="form-field">
-          <label>Total Tests</label>
-          <input type="number" id="run-total" value="0">
+        <div class="form-field" style="width:200px;">
+          <label>Filter by Tool</label>
+          <select id="filter-tool">
+            <option value="">All Tools</option>
+            <!-- Populated by JS -->
+          </select>
         </div>
-        <div class="form-field">
-          <label>Passed</label>
-          <input type="number" id="run-passed" value="0">
-        </div>
-        <div class="form-field">
-          <label>Failed</label>
-          <input type="number" id="run-failed" value="0">
-        </div>
-        <div class="form-field">
-          <label>Open Issues</label>
-          <input type="number" id="run-open" value="0">
-        </div>
-        <div class="form-field" style="flex:1 1 200px;">
-          <label>Notes</label>
-          <input type="text" id="run-notes" placeholder="Optional notes / scope">
-        </div>
-        <button class="btn-primary" id="run-save-btn">Save Run</button>
+        <div style="flex:1;"></div>
       </div>
 
       <table class="table" id="runs-table">
@@ -6067,18 +6059,27 @@ document.getElementById('btn-run-all').addEventListener('click', async ()=>{
 });
 
 /* Test runs */
-async function loadRuns(){
-  RUNS = await api('list-runs');
-  updateChartsFromRuns();
+function renderRunsTable(list){
   const tbody = document.querySelector('#runs-table tbody');
   tbody.innerHTML = '';
-  RUNS.forEach(r=>{
+  list.forEach(r=>{
     const tr = document.createElement('tr');
     tr.dataset.id = r.id;
+    // Show tools mini badges if available
+    let toolBadges = '';
+    if(r.tools){
+       const tCodes = r.tools.split(',');
+       if(tCodes.length > 3) toolBadges = `<span class="badge" style="background:#eee;color:#555">${tCodes.length} tools</span>`;
+       else toolBadges = tCodes.map(c=> `<span class="badge" style="background:#eef;color:#444">${c}</span>`).join(' ');
+    }
+    
     tr.innerHTML = `
       <td>${r.id}</td>
-      <td>${r.run_date}</td>
-      <td>${r.status}</td>
+      <td>
+        <div>${r.run_date}</div>
+        <div style="margin-top:2px;">${toolBadges}</div>
+      </td>
+      <td><span class="badge badge-${r.status === 'passed' ? 'pass' : 'fail'}">${r.status}</span></td>
       <td>${r.total_tests}</td>
       <td>${r.passed}</td>
       <td>${r.failed}</td>
@@ -6091,6 +6092,45 @@ async function loadRuns(){
     tbody.appendChild(tr);
   });
 }
+
+function applyRunFilters(){
+  const st = document.getElementById('filter-status').value.toLowerCase();
+  const tc = document.getElementById('filter-tool').value;
+  
+  const filtered = RUNS.filter(r => {
+      // Status filter
+      if(st && (r.status||'').toLowerCase() !== st) return false;
+      // Tool filter
+      if(tc){
+          const runTools = (r.tools||'').split(',');
+          if(!runTools.includes(tc)) return false;
+      }
+      return true;
+  });
+  renderRunsTable(filtered);
+}
+
+/* Test runs */
+async function loadRuns(){
+  RUNS = await api('list-runs');
+  updateChartsFromRuns();
+  
+  // Populate Tool Filter Dropdown if empty
+  const tf = document.getElementById('filter-tool');
+  if(tf && tf.options.length <= 1){
+     TOOL_DEFS.forEach(t => {
+         const opt = document.createElement('option');
+         opt.value = t.code;
+         opt.innerText = t.name;
+         tf.appendChild(opt);
+     });
+  }
+  
+  applyRunFilters();
+}
+
+document.getElementById('filter-status').addEventListener('change', applyRunFilters);
+document.getElementById('filter-tool').addEventListener('change', applyRunFilters);
 
 async function showRunDetails(runId){
   const panel = document.getElementById('run-details-panel');
@@ -6148,24 +6188,6 @@ document.querySelector('#runs-table').addEventListener('click', async (e)=>{
   if (!runId) return;
   await showRunDetails(runId);
 });
-
-document.getElementById('run-save-btn').addEventListener('click', async ()=>{
-  const status = document.getElementById('run-status').value;
-  const total  = parseInt(document.getElementById('run-total').value || '0',10);
-  const passed = parseInt(document.getElementById('run-passed').value || '0',10);
-  const failed = parseInt(document.getElementById('run-failed').value || '0',10);
-  const open   = parseInt(document.getElementById('run-open').value || '0',10);
-  const notes  = document.getElementById('run-notes').value.trim();
-
-  await api('save-run',{
-    status:status,total_tests:total,passed:passed,failed:failed,open_issues:open,notes:notes
-  });
-
-  document.getElementById('run-total').value = 0;
-  document.getElementById('run-passed').value = 0;
-  document.getElementById('run-failed').value = 0;
-  document.getElementById('run-open').value = 0;
-  document.getElementById('run-notes').value = '';
 
   await Promise.all([loadRuns(), loadStats()]);
 });
