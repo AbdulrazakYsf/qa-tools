@@ -5510,6 +5510,39 @@ body{margin:0;background:var(--bg);color:#263238;}
   </div>
 </div>
 
+<!-- RUN SUMMARY MODAL -->
+<div class="modal-overlay" id="run-summary-modal">
+  <div class="modal-card" style="max-width:500px; max-height:400px; height:auto;">
+    <div class="modal-header">
+      <h3>Run Complete</h3>
+      <button class="modal-close" onclick="closeSummaryModal()">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:20px; text-align:center;">
+      <div style="font-size:48px; margin-bottom:10px;" id="summary-icon">✅</div>
+      <h2 id="summary-title" style="margin:0 0 10px;">Run Passed</h2>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; text-align:left; margin:20px 0;">
+         <div class="stat-card stat-total" style="text-align:center;">
+             <div class="stat-value" id="sum-total">0</div>
+             <div class="stat-meta">Total</div>
+         </div>
+         <div class="stat-card stat-pass" style="text-align:center;">
+             <div class="stat-value" id="sum-passed">0</div>
+             <div class="stat-meta">Passed</div>
+         </div>
+         <div class="stat-card stat-fail" style="text-align:center;">
+             <div class="stat-value" id="sum-failed">0</div>
+             <div class="stat-meta">Failed</div>
+         </div>
+         <div class="stat-card stat-open" style="text-align:center;">
+             <div class="stat-value" id="sum-open">0</div>
+             <div class="stat-meta">Open Issues</div>
+         </div>
+      </div>
+      <button class="btn-primary" onclick="closeSummaryModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const TOOL_DEFS = <?php echo json_encode($TOOL_DEFS, JSON_UNESCAPED_UNICODE); ?>;
 const TOOL_HTML  = <?php echo json_encode($TOOLS_HTML, JSON_UNESCAPED_UNICODE); ?>;
@@ -5897,6 +5930,11 @@ function logToConsole(msg, type='info') {
   c.scrollTop = c.scrollHeight;
 }
 
+function closeSummaryModal(){
+  document.getElementById('run-summary-modal').classList.remove('active');
+}
+window.closeSummaryModal = closeSummaryModal;
+
 document.getElementById('btn-run-all').addEventListener('click', async ()=>{
   // Collect selected tools from checkboxes
   const selectedCodes = [...document.querySelectorAll('.module-run-checkbox:checked')].map(cb=>cb.dataset.code);
@@ -5949,13 +5987,20 @@ document.getElementById('btn-run-all').addEventListener('click', async ()=>{
         tool_code: code,
         rows: result.rows || []
       });
+      
+      // LOG DETAILS
+      if(result.rows && result.rows.length){
+         result.rows.forEach(r => {
+             const s = r.status.toUpperCase();
+             const isFail = ['FAILED','ERROR','OUT OF STOCK'].includes(s);
+             const type = isFail ? 'warn' : 'success';
+             const icon = isFail ? '❌' : '✅';
+             logToConsole(`  -> ${icon} [${s}] ${r.url}`, type);
+         });
+      }
+
       if(result.failed > 0) {
          logToConsole(`${code} Finished: ${result.passed} Pass, ${result.failed} Fail`, 'error');
-         if(result.rows && result.rows.length){
-             // Basic summary of failures
-             const failRows = result.rows.filter(r=>['FAILED','ERROR','OUT OF STOCK'].includes(r.status.toUpperCase()));
-             failRows.forEach(r => logToConsole(`  -> ${r.status}: ${r.url}`, 'warn'));
-         }
       } else {
          logToConsole(`${code} Finished: ${result.passed} Pass, ${result.failed} Fail`, 'success');
       }
@@ -5985,10 +6030,37 @@ document.getElementById('btn-run-all').addEventListener('click', async ()=>{
     await Promise.all([loadRuns(), loadStats()]);
     logToConsole('Run Saved Successfully.', 'success');
     logToConsole('Run All Tests completed.', 'info');
-    logToConsole(`Total: ${totalTests} | Passed: ${totalPassed} | Failed: ${totalFailed} | Open: ${totalOpen}`, totalFailed>0?'error':'success');
+    
+    // Auto-close console and show summary
+    setTimeout(()=>{
+        exitConsoleMode();
+        
+        // Show Summary Modal
+        document.getElementById('sum-total').innerText = totalTests;
+        document.getElementById('sum-passed').innerText = totalPassed;
+        document.getElementById('sum-failed').innerText = totalFailed;
+        document.getElementById('sum-open').innerText = totalOpen;
+        
+        const title = document.getElementById('summary-title');
+        const icon = document.getElementById('summary-icon');
+        if(totalFailed > 0){
+            title.innerText = 'Run Completed with Errors';
+            title.style.color = '#d32f2f';
+            icon.innerText = '⚠️';
+        } else {
+            title.innerText = 'Run Passed Successfully';
+            title.style.color = '#2e7d32';
+            icon.innerText = '✅';
+        }
+        
+        document.getElementById('run-summary-modal').classList.add('active');
+        
+    }, 1500); // Short delay to let user see "Saved" message
+
   } catch (e) {
     console.error(e);
     logToConsole('Error Saving Run: ' + e.message, 'error');
+    alert('Error saving run: ' + e.message);
   } finally {
     btn.disabled = false;
   }
