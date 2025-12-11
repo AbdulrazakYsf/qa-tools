@@ -81,10 +81,10 @@ $TOOLS_HTML = [
     <legend>Countries</legend>
     <div class="country-grid">
       <label><input type="checkbox" class="country" value="SA" checked> Saudi Arabia (SA)</label>
-      <label><input type="checkbox" class="country" value="AE"> United Arab Emirates (AE)</label>
-      <label><input type="checkbox" class="country" value="KW"> Kuwait (KW)</label>
-      <label><input type="checkbox" class="country" value="QA"> Qatar (QA)</label>
-      <label><input type="checkbox" class="country" value="BH"> Bahrain (BH)</label>
+      <label><input type="checkbox" class="country" value="AE" checked> United Arab Emirates (AE)</label>
+      <label><input type="checkbox" class="country" value="KW" checked> Kuwait (KW)</label>
+      <label><input type="checkbox" class="country" value="QA" checked> Qatar (QA)</label>
+      <label><input type="checkbox" class="country" value="BH" checked> Bahrain (BH)</label>
     </div>
     <div class="hint">Multiple selection supported—each country is processed independently.</div>
   </fieldset>
@@ -136,7 +136,7 @@ const CART_API    = (store)=>`https://www.jarir.com/api/v2/${store}/cart/updateM
 const CREATE_GUEST= (store)=>`https://www.jarir.com/api/v2/${store}/cart/createv2`;
 
 /* ---------- State ---------- */
-let rows = []; // {country, store, status, ok, message, details}
+const rows = window.rows = []; // {country, store, status, ok, message, details, url, parent}
 
 /* ---------- UI Wiring ---------- */
 document.querySelectorAll('input[name="mode"]').forEach(r=>{
@@ -181,7 +181,7 @@ async function run(){
   // Process each country independently
   for(const country of selected){
     const map = COUNTRY_MAP[country];
-    if(!map){ pushRow({country, store:'?', ok:false, status:'ERROR', message:'Unknown country mapping', details:{}}); render(); continue; }
+    if(!map){ pushRow({country, store:'?', ok:false, status:'ERROR', message:'Unknown country mapping', details:{}, url:'?', parent:'?'}); render(); continue; }
 
     let token='', quoteId=null;
 
@@ -197,16 +197,16 @@ async function run(){
         const success = loginResp?.success===true && !!(loginResp?.data?.token);
         if(!success){
           pushRow({country, store:map.store, ok:false, status:'ERROR',
-            message:`Login failed: ${loginResp?.message||'Unknown'} (${loginResp?.type||''})`, details:loginResp});
+            message:`Login failed: ${loginResp?.message||'Unknown'} (${loginResp?.type||''})`, details:loginResp, url:'Login', parent:map.store});
           render();
           continue; // Skip A2C for this country but continue others
         }
         token   = loginResp.data.token || '';
         quoteId = loginResp.data.quote_id ?? null;
-        pushRow({country, store:map.store, ok:true, status:'OK', message:'Login success', details:{token,quoteId}});
+        pushRow({country, store:map.store, ok:true, status:'OK', message:'Login success', details:{token,quoteId}, url:'Login', parent:map.store});
         render();
       }catch(e){
-        pushRow({country, store:map.store, ok:false, status:'ERROR', message:'Login request failed: '+e.message, details:{}});
+        pushRow({country, store:map.store, ok:false, status:'ERROR', message:'Login request failed: '+e.message, details:{}, url:'Login', parent:map.store});
         render();
         continue;
       }
@@ -218,15 +218,15 @@ async function run(){
         }).then(r=>r.json());
         const resultId = guestResp?.data?.result || '';
         if(!resultId){
-          pushRow({country, store:map.store, ok:false, status:'ERROR', message:'Guest quote creation failed', details:guestResp});
+          pushRow({country, store:map.store, ok:false, status:'ERROR', message:'Guest quote creation failed', details:guestResp, url:'GuestQuote', parent:map.store});
           render();
           continue;
         }
         quoteId = resultId;
-        pushRow({country, store:map.store, ok:true, status:'OK', message:'Guest quote created', details:{quoteId}});
+        pushRow({country, store:map.store, ok:true, status:'OK', message:'Guest quote created', details:{quoteId}, url:'GuestQuote', parent:map.store});
         render();
       }catch(e){
-        pushRow({country, store:map.store, ok:false, status:'ERROR', message:'Guest quote request failed: '+e.message, details:{}});
+        pushRow({country, store:map.store, ok:false, status:'ERROR', message:'Guest quote request failed: '+e.message, details:{}, url:'GuestQuote', parent:map.store});
         render();
         continue;
       }
@@ -256,10 +256,10 @@ async function run(){
       const ok = data?.success===true;
       const status = ok ? 'OK' : (resp.ok ? 'WARN' : 'ERROR');
       const message = (data?.message || (ok?'Added to cart':'Not added')).toString();
-      pushRow({country, store:map.store, ok, status, message, details:data});
+      pushRow({country, store:map.store, ok, status, message, details:data, url:'SKUs: '+skusArray.length, parent:map.store});
       render();
     }catch(e){
-      pushRow({country, store:map.store, ok:false, status:'ERROR', message:'Add to cart failed: '+e.message, details:{}});
+      pushRow({country, store:map.store, ok:false, status:'ERROR', message:'Add to cart failed: '+e.message, details:{}, url:'SKUs: '+skusArray.length, parent:map.store});
       render();
     }
   }
@@ -268,8 +268,8 @@ async function run(){
 }
 
 /* ---------- Rows / Render ---------- */
-function pushRow({country,store,ok,status,message,details}){
-  rows.push({country, store, ok, status, message, details});
+function pushRow({country,store,ok,status,message,details,url,parent}){
+  rows.push({country, store, ok, status, message, details, url, parent});
 }
 
 function render(){
@@ -305,7 +305,7 @@ function clearSession(){
   document.getElementById('loginJson').value='';
   document.querySelector('input[name="mode"][value="guest"]').checked = true;
   document.getElementById('loginBox').classList.add('hidden');
-  document.querySelectorAll('.country').forEach(el=>{ el.checked = (el.value==='SA'); });
+  document.querySelectorAll('.country').forEach(el=>el.checked = true);
   toggleLoading(false);
 }
 
