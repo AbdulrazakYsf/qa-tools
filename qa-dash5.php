@@ -293,7 +293,7 @@ function render(){
 }
 
 function clearResults(){
-  rows = [];
+  rows.length = 0;
   document.getElementById('results').innerHTML='';
   document.getElementById('empty').style.display='none';
 }
