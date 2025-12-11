@@ -1,4 +1,6 @@
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 $TOOLS_HTML = [
     'add_to_cart' => <<<'ADD_TO_CART_HTML'
 <!DOCTYPE html>
