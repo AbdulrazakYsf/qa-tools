@@ -5489,6 +5489,10 @@ body{margin:0;background:var(--bg);color:#263238;}
 .chart-card canvas{width:100%;max-height:180px;}
 @media(max-width:900px){.charts-grid{grid-template-columns:repeat(1,minmax(0,1fr));}}
 
+
+.stats-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+@media(max-width: 900px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
+@media(max-width: 480px) { .stats-row { grid-template-columns: 1fr; } }
 .stat-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;border-top:4px solid transparent;}
 .stat-card h3{margin:0 0 8px;font-size:14px;color:var(--muted);}
 .stat-value{font-size:26px;font-weight:700;}
