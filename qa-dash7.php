@@ -6160,7 +6160,8 @@ function downloadRunsCSV(){
   const a = document.createElement('a');
   a.setAttribute('hidden', '');
   a.setAttribute('href', url);
-  a.setAttribute('download', 'test_runs_export.csv');
+  const dateStr = new Date().toISOString().slice(0,10);
+  a.setAttribute('download', `QA_Test_Runs_Summary_${dateStr}.csv`);
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
