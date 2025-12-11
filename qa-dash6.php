@@ -5648,12 +5648,12 @@ function applyConfigToTool(doc, code, cfgObj) {
     case 'brand':
     case 'category':
     case 'cms':
-    case 'sku':
-    case 'stock': {
+    case 'sku': {
       const el = doc.getElementById('urlInput');
       if (el) el.value = inputs;
       break;
     }
+    case 'stock':
     case 'getcategories':
     case 'images':
     case 'products':
