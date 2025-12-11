@@ -1,0 +1,197 @@
+{
+    "description": "DO NOT DELETE THIS FILE. This file is used to keep track of which files have been synced in the most recent deployment. If you delete this file a resync will need to be done (which can take a while) - read more: https://github.com/SamKirkland/FTP-Deploy-Action",
+    "version": "1.0.0",
+    "generatedTime": 1765466798947,
+    "data": [
+        {
+            "type": "file",
+            "name": ".ftpignore",
+            "size": 49,
+            "hash": "ebe9e181b0408c0c5fc16b652bd3af855916180beccea3c47d8cc394cedf94ef"
+        },
+        {
+            "type": "file",
+            "name": "README.md",
+            "size": 5393,
+            "hash": "2a061e1c6b358c7b7116f885e9b0dd3e81fba18346030736612cd0e6326cb72a"
+        },
+        {
+            "type": "file",
+            "name": "download (1).zip",
+            "size": 334397,
+            "hash": "cee1e9f6fb573b4e0bec2797733afa10062ba1a06a61b4ebe45dc48474c16769"
+        },
+        {
+            "type": "file",
+            "name": "qa-dash3.php",
+            "size": 218534,
+            "hash": "7c93eee031930d4218a9842175dba1779810f70e986d634efcffc7cd3c94180a"
+        },
+        {
+            "type": "file",
+            "name": "qa-dash5.php",
+            "size": 219204,
+            "hash": "2358d65852074a84afd7f085a766343750bd6d9ac20663899d56c42ab6f7874e"
+        },
+        {
+            "type": "file",
+            "name": "qa-dash6.php",
+            "size": 221324,
+            "hash": "00e452cbb5dc63110499505c0c934cd292cbfcfed88fbfe8569c86caf46b611e"
+        },
+        {
+            "type": "file",
+            "name": "qa-dash7.php",
+            "size": 244096,
+            "hash": "6ec3e273c00759f6e3bbaf6bdb5d306a68a092fb3201d21c818b776587bb1559"
+        },
+        {
+            "type": "file",
+            "name": "qa-dashboard.php",
+            "size": 50724,
+            "hash": "1bd6b63e34abd5480a98f2fdf50fadc3ea4f4d366078f600b6daaa542e1f72ce"
+        },
+        {
+            "type": "file",
+            "name": "qa_run_report.php",
+            "size": 18055,
+            "hash": "d5254e65da08b528c942661dff1b47063f8d4caceda3c1758e079d3b46360dfc"
+        },
+        {
+            "type": "file",
+            "name": "system_architecture.md",
+            "size": 4232,
+            "hash": "b81419a9da25e11b308abf964e46623710ed014866ffaf7da6c9e3b452b01174"
+        },
+        {
+            "type": "folder",
+            "name": "tools"
+        },
+        {
+            "type": "file",
+            "name": "xyz.php",
+            "size": 29,
+            "hash": "0a5cd20fc1f43214362776d3cdf120af9e1973b1d3b0980bcb3bd8d7e68981d1"
+        },
+        {
+            "type": "file",
+            "name": "tools/add_to_cart.html",
+            "size": 13441,
+            "hash": "03844019d782c6d503466518b44b20cbe5cb90e48e8a0da5fc725033dbad65aa"
+        },
+        {
+            "type": "file",
+            "name": "tools/asset_count.html",
+            "size": 4227,
+            "hash": "28bae14258a4071045793a7e9971db17dd9b0664534b5b81d0c1d2f0e125db17"
+        },
+        {
+            "type": "file",
+            "name": "tools/brand.html",
+            "size": 10686,
+            "hash": "ab1aff211d4b2bd0eaac22d4ee7a4ffcdbf5bd47b44a0a40de5c47cf0aee0438"
+        },
+        {
+            "type": "file",
+            "name": "tools/category.html",
+            "size": 12157,
+            "hash": "fae9fa5b183f44d12d4f6d51d7f99bcbde64b80e9640d837d573538935d65622"
+        },
+        {
+            "type": "file",
+            "name": "tools/category_filter.html",
+            "size": 12764,
+            "hash": "8556f370bdbf29b4a1fefec736d54cbd8851825ce765e7fbd0992f3b69bce7ab"
+        },
+        {
+            "type": "file",
+            "name": "tools/cms.html",
+            "size": 11954,
+            "hash": "4005226a18a534226e58fefd08be7d806231cd88d30761921c27c9cae12c4970"
+        },
+        {
+            "type": "file",
+            "name": "tools/crawler.png",
+            "size": 205841,
+            "hash": "ccc9bc97c8fcc561af04edf1880426e2a257d2e5b3a21db7734cba3d57ab2b2b"
+        },
+        {
+            "type": "file",
+            "name": "tools/favicon.ico",
+            "size": 15406,
+            "hash": "0adcab29580107807bafd482c910a2d2e2306b6f1b9eeb4876b889f07f2fbf7a"
+        },
+        {
+            "type": "file",
+            "name": "tools/getcategories.html",
+            "size": 10499,
+            "hash": "59b504266cffcedd06e1238fe034cc0192b5685009b8d42b99fa7d05a5b396ce"
+        },
+        {
+            "type": "file",
+            "name": "tools/headers_check.html",
+            "size": 3821,
+            "hash": "9caf1d1873373cbc3148abb28e18df08876ecc4a71fc87df5519834756960ea1"
+        },
+        {
+            "type": "file",
+            "name": "tools/images.html",
+            "size": 9952,
+            "hash": "5c7af0d0b78df055d2c55bbabcfdae45b8a1cd6cedc699c0f87d1b0f5bbf7ba9"
+        },
+        {
+            "type": "file",
+            "name": "tools/json_validator.html",
+            "size": 3795,
+            "hash": "27eb750321a21bf39e7165c14f740c59e0884844118d8a489cf0468298a6f694"
+        },
+        {
+            "type": "file",
+            "name": "tools/link_extractor.html",
+            "size": 3935,
+            "hash": "cf67196900a75190e8e7f614e7a5f1b1fbe3cfd36894ca2dae29be4e426902cb"
+        },
+        {
+            "type": "file",
+            "name": "tools/login.html",
+            "size": 11658,
+            "hash": "db3b3add337a0d0e548ef04b3e97c86b7f2060f29d9ef6390874455df97c8858"
+        },
+        {
+            "type": "file",
+            "name": "tools/price_checker.html",
+            "size": 25993,
+            "hash": "ba9442f990bf65412241bfc59fc9b1922575b10f3eb6bfb9bc7678e7fb23d744"
+        },
+        {
+            "type": "file",
+            "name": "tools/products.html",
+            "size": 12877,
+            "hash": "c063c814654a592458ebb0cba1687c0c171f7daf3d2da5f8003b23c2201896a3"
+        },
+        {
+            "type": "file",
+            "name": "tools/sku.html",
+            "size": 11914,
+            "hash": "8845f5f3fb9bd9aaf7ec4a36319d7d8ce114509b1576f9bbf7987ecab91eaa18"
+        },
+        {
+            "type": "file",
+            "name": "tools/speed_test.html",
+            "size": 4527,
+            "hash": "4eb5b0bd9fbbc1937fa3ccbce5e3b88b06b16c70d14283b64075a85250124631"
+        },
+        {
+            "type": "file",
+            "name": "tools/stock.html",
+            "size": 12375,
+            "hash": "622092dc60a14b5b77adbd2268420f003b6dc5784b734266dd0b9b513c688efc"
+        },
+        {
+            "type": "file",
+            "name": "tools/sub_category.html",
+            "size": 11760,
+            "hash": "1de421ab6f075db69109f380ca8edeea92a80a5010c1ce12ce2ae74d45fca00d"
+        }
+    ]
+}

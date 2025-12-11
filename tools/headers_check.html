@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Headers Inspector</title>
+    <style>
+        :root {
+            --bg: #f4f7fa;
+            --card: #fff;
+            --blue: #1E88E5;
+            --green: #43A047;
+            --red: #E53935;
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: var(--bg);
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--card);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            margin-top: 0;
+            color: var(--blue);
+            font-size: 20px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+
+        button {
+            background: var(--blue);
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .results {
+            margin-top: 20px;
+        }
+
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-bottom: 20px;
+        }
+
+        .header-table th {
+            background: #eee;
+            text-align: left;
+            padding: 8px;
+        }
+
+        .header-table td {
+            border-bottom: 1px solid #eee;
+            padding: 6px;
+            word-break: break-all;
+        }
+
+        .key {
+            font-weight: bold;
+            color: #455a64;
+            width: 30%;
+        }
+
+        .status-line {
+            padding: 10px;
+            background: #f8f9fa;
+            font-weight: bold;
+            border-left: 4px solid #ccc;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Headers Inspector</h1>
+        <p>Fetch URLs (HEAD request) and inspect response headers.</p>
+        <textarea id="input" placeholder="https://www.jarir.com"></textarea>
+        <button onclick="run()">Inspect Headers</button>
+        <div id="output" class="results"></div>
+    </div>
+    <script>
+        async function run() {
+            const urls = document.getElementById('input').value.trim().split(/\n/).map(s => s.trim()).filter(Boolean);
+            const out = document.getElementById('output');
+            out.innerHTML = '';
+
+            for (const url of urls) {
+                const div = document.createElement('div');
+                div.innerHTML = `<div class="status-line">Fetching ${url}...</div>`;
+                out.appendChild(div);
+
+                try {
+                    const resp = await fetch(url, { method: 'HEAD' });
+                    let html = `<div class="status-line" style="border-color:${resp.ok ? '#43A047' : '#E53935'}">${resp.status} ${resp.statusText}</div>`;
+                    html += `<table class="header-table"><tr><th>Header</th><th>Value</th></tr>`;
+
+                    for (const [key, val] of resp.headers) {
+                        html += `<tr><td class="key">${key}</td><td>${val}</td></tr>`;
+                    }
+                    html += `</table>`;
+                    div.innerHTML = html;
+                } catch (e) {
+                    div.innerHTML = `<div class="status-line" style="border-color:#E53935">Error: ${e.message}</div>`;
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>

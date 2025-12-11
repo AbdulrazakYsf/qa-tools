@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SKU Detail Diff / Banner Price Checker</title>
+<link rel="icon" href="favicon.ico">
+
+<!-- Tesseract.js -->
+<script src="https://unpkg.com/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+
+<style>
+ :root{
+   --blue:#007BFF;--bg:#f4f7fa;--card:#fff;--shadow:0 4px 12px rgba(0,0,0,.1);
+   --ok:#0b7a0b;--warn:#b56200;--err:#b00020;--muted:#666;--r:10px
+ }
+ *{box-sizing:border-box;margin:0;padding:0}
+ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg);color:#222;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:18px}
+ .container{width:100%;max-width:1280px;background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:20px}
+ header{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid var(--blue);padding-bottom:10px;margin-bottom:16px}
+ header img{width:52px;height:52px}
+ header h1{font-size:22px;color:var(--blue);margin:0}
+ textarea{width:100%;height:130px;margin:10px 0;padding:10px 12px;border:1px solid #cfd6dd;border-radius:8px;font-size:15px;resize:vertical}
+ .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+ input,button{font-family:inherit;font-size:14px}
+ input[type="text"],input[type="number"],input[type="password"]{padding:8px 10px;border:1px solid #cfd6dd;border-radius:8px;min-width:240px}
+ button{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:10px 14px;font-weight:600;cursor:pointer;transition:.25s}
+ button:hover{background:#0566e5}
+ .muted{background:#555}.copy{background:#00906d}
+ .loading{display:none;color:#f90;font-weight:700;margin:6px 0}
+ .panel{margin-top:14px;padding:14px;background:#f9fafb;border:1px solid #e4e9ee;border-radius:10px}
+ .panel h3{margin:0 0 10px 0}
+ .grid2{display:grid;grid-template-columns:1fr;gap:14px}
+ .pair{display:grid;grid-template-columns:360px 1fr;gap:14px;align-items:start;border:1px solid #e5e9ef;border-radius:10px;background:#fff;overflow:hidden}
+ .pair .left,.pair .right{padding:10px}
+ .left{border-right:1px solid #eef2f7;background:#fff}
+ .head{padding:8px 10px;border-bottom:1px solid #eef2f7;background:#fafbfd;font-weight:700;font-size:13px}
+ .thumb{width:100%;height:auto;display:block;background:#eee;border-radius:8px}
+ .badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;font-weight:700;vertical-align:middle;margin-left:6px}
+ .OK{background:#d9f6d9;color:var(--ok)} .NOMATCH{background:#ffe6cc;color:var(--warn)}
+ .UNKNOWN{background:#eee;color:#444} .ERROR{background:#ffd9d9;color:#b00020}
+ .meta{font-size:12px;color:#555;margin-top:6px}
+ code{background:#eef;padding:1px 5px;border-radius:4px}
+ .small{font-size:12px;color:#666}
+ .pill{display:inline-block;background:#eef;border:1px solid #dde;padding:2px 6px;border-radius:999px;font-size:11px;margin:2px 4px 0 0}
+ .col{display:flex;flex-direction:column;gap:8px}
+ a{color:#0a58ca;text-decoration:none} a:hover{text-decoration:underline}
+ .kv{display:grid;grid-template-columns:140px 1fr;gap:8px;font-size:12px}
+ .kv div:nth-child(odd){color:#666}
+ .ocr-src{font-size:12px;color:#333}
+ .divider{height:1px;background:#eef2f7;margin:8px 0}
+ .empty{display:none;margin-top:8px;color:#b00020;font-weight:600}
+ label.toggle{display:flex;align-items:center;gap:6px}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div class="container">
+  <header>
+    <img src="crawler.png" alt="Logo">
+    <h1>SKU Detail Diff / Banner Price Checker</h1>
+  </header>
+
+  <p class="small">Paste one or more <strong>CMS page-v2</strong> parent URLs (e.g. <code>.../cmspage/page-v2/home</code>). We extract (banner image + CMS slug) → OCR price → open child CMS → collect SKUs → fetch <code>final_price</code> via <code>catalogv1/product/store/&lt;store&gt;/sku/&lt;SKUS&gt;</code> → compare.</p>
+  <textarea id="cmsInput" placeholder="https://www.jarir.com/api/v2/sa_en/cmspage/page-v2/home"></textarea>
+
+  <div class="row" style="margin-top:6px">
+    <button onclick="run()">Scan & Compare</button>
+    <button class="muted" onclick="clearSession()">Clear Session</button>
+    <button class="copy" onclick="copyVisible()">Copy Visible</button>
+    <label class="toggle"><input type="checkbox" id="imgEnhance" checked> Sharpen / binarize before OCR</label>
+    <label class="toggle">Max SKUs per CMS: <input id="skuLimit" type="number" min="1" max="100" value="24" style="width:80px"></label>
+  </div>
+
+  <div class="panel">
+    <h3>OCR Provider</h3>
+    <div class="row">
+      <label class="toggle"><input type="radio" name="ocrProvider" value="hf"> Hugging Face Space (DeepSeek-OCR)</label>
+      <label class="toggle"><input type="radio" name="ocrProvider" value="tesseract" checked> Tesseract Pro (in-browser)</label>
+      <input id="hfSpace" type="text" value="merterbak/DeepSeek-OCR-Demo" style="min-width:260px" title="owner/space-name">
+      <input id="hfToken" type="password" placeholder="(optional) hf_… token" style="min-width:260px">
+      <span class="small">Serve via http(s) to use HF; browsers block it from <code>file://</code> (CORS).</span>
+    </div>
+  </div>
+
+  <div id="loading" class="loading">Processing… (OCR + API fetch)</div>
+
+  <div class="panel">
+    <h3>Discovered in Parent Page(s)</h3>
+    <div id="discover" class="col"></div>
+  </div>
+
+  <div class="panel">
+    <h3>Paired Results (Banner ↔ Comparison)</h3>
+    <div id="pairs" class="grid2"></div>
+    <p id="empty" class="empty">No banners / comparisons for the given input.</p>
+  </div>
+
+  <div class="panel">
+    <h3>Manual Pairs (optional)</h3>
+    <p class="small">One per line: <code>imageURL || cmsSlugOrSkuUrl</code>. A slug like <code>apple-iphone-17</code> is resolved using the first parent’s store; a full product API URL is used directly.</p>
+    <textarea id="pairsInput" placeholder="https://wp-media/banner1.jpg || apple-iphone-17"></textarea>
+    <div class="row" style="margin-top:6px">
+      <button onclick="runPairs()">Scan Manual Pairs</button>
+    </div>
+  </div>
+
+  <p class="small" style="margin-top:10px"><strong>Rule:</strong> OCR price (Arabic/English digits) must equal any <code>final_price</code> fetched for the first-level SKUs.</p>
+
+  <footer style="margin-top:14px;text-align:center;color:#888;font-size:13px">© 2025 Banner Price Checker</footer>
+</div>
+
+<script type="module">
+/* Load HF Gradio client only over http(s) */
+let GradioClient = null, handle_file = null;
+if (location.protocol !== 'file:') {
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js');
+    GradioClient = mod.Client; handle_file = mod.handle_file;
+  } catch(e) { console.warn('Gradio client load failed:', e); }
+}
+
+/* ============ Helpers ============ */
+const uniq = a => [...new Set(a)];
+function baseApi(u){ return u.split('/api')[0] + '/api/'; }
+function deriveStore(u){ try{ return u.split('/')[5] || 'sa_en'; }catch{ return 'sa_en'; } }
+const toHyphenStore = s => String(s).replace('_','-');
+const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
+function toWesternDigits(s){
+  const map = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9'};
+  return String(s).replace(/[٠-٩۰-۹]/g, ch => map[ch] ?? ch);
+}
+const onlyDigits = s => String(s).replace(/[^\d]/g,'');
+function normalizePriceNumber(s){
+  const western = toWesternDigits(s);
+  const dig = onlyDigits(western);
+  return dig.replace(/^0+/, '') || dig;
+}
+function extractPriceCandidatesFromText(t){
+  t = toWesternDigits(t).replace(/(?:sar|aed|kwd|qar|bhd?|rs|riyals?|﷼|ر\.?س\.?)/gi,' ')
+                        .replace(/cash\s*back|vat|offer|starting\s*from|from|only|save|off/gi,' ');
+  const rx = /\b\d{1,3}(?:[,\s]\d{3})+(?:[.,]\d{1,2})?|\b\d{3,7}(?:[.,]\d{1,2})?\b/g;
+  return uniq((t.match(rx)||[]).map(normalizePriceNumber).filter(s=>s.length>=3 && s.length<=7));
+}
+
+/* ============ Image preprocessing (safe) ============ */
+function unsharp(ctx, w, h) {
+  const src = ctx.getImageData(0,0,w,h), out = ctx.createImageData(w,h);
+  const sd = src.data, od = out.data, amount = 0.6;
+  const at = (x,y,c)=>{x=clamp(x,0,w-1);y=clamp(y,0,h-1);return sd[(y*w+x)*4+c];};
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      for(let c=0;c<3;c++){
+        const n = (at(x-1,y-1,c)+at(x,y-1,c)+at(x+1,y-1,c)+at(x-1,y,c)+at(x,y,c)+at(x+1,y,c)+at(x-1,y+1,c)+at(x,y+1,c)+at(x+1,y+1,c))/9;
+        const v = at(x,y,c) + amount*(at(x,y,c)-n);
+        od[(y*w+x)*4+c] = clamp(v,0,255);
+      }
+      od[(y*w+x)*4+3] = at(x,y,3);
+    }
+  }
+  ctx.putImageData(out,0,0);
+}
+function contrastStretch(ctx,w,h){
+  const img=ctx.getImageData(0,0,w,h), d=img.data;
+  let min=255,max=0;
+  for(let i=0;i<d.length;i+=4){
+    const g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+    min=Math.min(min,g); max=Math.max(max,g);
+  }
+  const scale = max>min ? 255/(max-min) : 1;
+  for(let i=0;i<d.length;i+=4){
+    let g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+    g = (g-min)*scale; d[i]=d[i+1]=d[i+2]=g;
+  }
+  ctx.putImageData(img,0,0);
+}
+function adaptiveBinarize(ctx,w,h){
+  const img=ctx.getImageData(0,0,w,h), d=img.data;
+  let sum=0; for(let i=0;i<d.length;i+=4) sum+=d[i];
+  const mean=sum/(d.length/4), k=1.7;
+  for(let i=0;i<d.length;i+=4){
+    const v = (d[i]-128)*k+128; const b = v>mean?255:0;
+    d[i]=d[i+1]=d[i+2]=b;
+  }
+  ctx.putImageData(img,0,0);
+}
+async function preprocessToDataURL(blob, {enhance=true}={}){
+  const bmp = await createImageBitmap(blob);
+  // guarantee workable width 1200–2000 px
+  const targetW = Math.min(2000, Math.max(1200, bmp.width));
+  const scale = targetW / bmp.width;
+  const W = Math.round(bmp.width*scale), H = Math.round(bmp.height*scale);
+  const canvas = document.createElement('canvas'); canvas.width=W; canvas.height=H;
+  const ctx = canvas.getContext('2d', { willReadFrequently:true });
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(bmp, 0, 0, W, H);
+  if(enhance){ unsharp(ctx,W,H); contrastStretch(ctx,W,H); adaptiveBinarize(ctx,W,H); }
+  return canvas.toDataURL('image/png');
+}
+
+/* ============ Tesseract Pro (no custom worker) ============ */
+const TESS_LANG_PATH="https://tessdata.projectnaptha.com/4.0.0";
+async function tesseractPass(img, psm){
+  return await Tesseract.recognize(
+    img, 'eng+ara',
+    {
+      langPath: TESS_LANG_PATH,
+      tessedit_pageseg_mode: String(psm),
+      tessedit_char_whitelist: "0123456789,.٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹",
+      classify_bln_numeric_mode: "1",
+      user_defined_dpi: "300",
+      preserve_interword_spaces: "1"
+    }
+  );
+}
+function scoreOcr(text, data){
+  const words = data?.words || [];
+  const digitWords = words.filter(w => /\d/.test(w.text||""));
+  const conf = digitWords.length ? digitWords.reduce((a,w)=>a+(w.confidence||0),0)/digitWords.length : (data?.confidence||0);
+  const prices = extractPriceCandidatesFromText(text||'');
+  return {score: conf + Math.min(5, prices.length)*3, prices};
+}
+async function ocrWithTesseractPro(url, enhance){
+  const blob = await fetch(url,{mode:'cors'}).then(r=>r.blob());
+  const dataUrl = await preprocessToDataURL(blob,{enhance});
+  const psms = [6,7,12]; // body text / single line / sparse
+  let best={score:-1,prices:[]};
+  for(const p of psms){
+    const res = await tesseractPass(dataUrl, p);
+    const s = scoreOcr(res?.data?.text||'', res?.data);
+    if(s.score>best.score) best=s;
+  }
+  if(best.prices.length===0){
+    const res = await tesseractPass(url, 6);
+    const s = scoreOcr(res?.data?.text||'', res?.data);
+    if(s.score>best.score) best=s;
+  }
+  return {text:'<<omitted>>', prices:best.prices, provider:'tesseract'};
+}
+
+/* ============ HF Space OCR (auto-disabled on file://) ============ */
+async function connectSpace(){
+  if(!GradioClient) throw new Error('HF disabled on file:// — serve via http(s)');
+  const space = document.getElementById('hfSpace').value.trim() || 'merterbak/DeepSeek-OCR-Demo';
+  const token = document.getElementById('hfToken').value.trim();
+  return await GradioClient.connect(space, token ? { hf_token: token } : {});
+}
+async function runSpaceOCROnUrl(imageUrl){
+  const app = await connectSpace();
+  const api = await app.view_api();
+  const endpoints=[...Object.keys(api.named_endpoints||{}),...Object.keys(api.unnamed_endpoints||{})];
+  if(!endpoints.length) throw new Error('No endpoints exposed by the Space');
+  const blob = await fetch(imageUrl,{mode:'cors'}).then(r=>r.blob());
+  const file = handle_file(blob);
+  for(const api_name of ['/predict','/run', endpoints[0]]){
+    try{
+      let result = await app.predict(api_name, [file]);
+      let text = Array.isArray(result?.data)
+                 ? result.data.map(x=> typeof x==='string'?x:(x?.text??x?.value??JSON.stringify(x))).join(' ')
+                 : (typeof result?.data==='string' ? result.data : JSON.stringify(result?.data ?? result));
+      return { text, prices: extractPriceCandidatesFromText(text), provider:'hf-space' };
+    }catch{}
+  }
+  throw new Error('Space predict failed');
+}
+async function ocrImage(url, enhance){
+  const requested = [...document.querySelectorAll('input[name="ocrProvider"]')].find(r=>r.checked)?.value || 'tesseract';
+  if(requested==='hf' && location.protocol!=='file:'){
+    try{ return await runSpaceOCROnUrl(url); }catch(e){ console.warn('HF failed → Tesseract:', e); }
+  }
+  return ocrWithTesseractPro(url, enhance);
+}
+
+/* ============ CMS → pairs / SKUs / prices ============ */
+function extractImageCmsPairsFromParent(json){
+  const items = json?.data?.cms_items?.items || [];
+  const pairs=[];
+  items.forEach(({item})=>{
+    const tokens=item.split('||').map(s=>s.trim());
+    for(let i=0;i<tokens.length;i++){
+      const tok=tokens[i];
+      if(/^https?:\/\/.*\.(?:jpg|jpeg|png|webp)(\?.*)?$/i.test(tok)){
+        const info=(tokens[i+1]||'').split(',');
+        if(info[0]==='cms' && info[1]) pairs.push({image:tok,cmsSlug:info[1]});
+      }
+      const seg=tok.split(',');
+      if(seg.length>=3 && /^https?:\/\/.*\.(?:jpg|jpeg|png|webp)/i.test(seg[0]) && seg[1]==='cms' && seg[2]) pairs.push({image:seg[0],cmsSlug:seg[2]});
+    }
+  });
+  const ql=json?.data?.quick_links||[];
+  ql.forEach(q=> (q.child_items||[]).forEach(ch=>{ if(ch.linkType==='cms'&&ch.linkValue) pairs.push({image:null,cmsSlug:ch.linkValue}); }));
+  return pairs;
+}
+function extractSkusFromChildCMS(json, limit){
+  const items=json?.data?.cms_items?.items||[];
+  const out=new Set();
+  items.forEach(({item})=>{
+    const t=item.trim();
+    if(/^products\|\|/i.test(t) || /^productlist\|\|/i.test(t)){
+      const csv=t.split('||')[1]||''; csv.split(',').map(s=>s.trim()).filter(Boolean).forEach(s=>out.add(s));
+    }
+    t.split('||').forEach(seg=>{
+      const p=seg.split(',');
+      if(p[0]==='products' && p[1]) p[1].split(',').forEach(s=>out.add(s.trim()));
+      if(p[0]==='product' && p[1]) out.add(p[1].trim());
+    });
+  });
+  return Array.from(out).slice(0,limit);
+}
+function pickFinalPrices(j){
+  const finals=[]; const hits=j?.data?.hits?.hits||j?.hits?.hits||[];
+  hits.forEach(h=>{ const src=h._source||h.source||h||{}; if(src.final_price!=null) finals.push(String(src.final_price)); });
+  return uniq(finals.map(normalizePriceNumber));
+}
+async function fetchProductFinalPrices(apiBase, storeHyph, skusCsv){
+  const url=`${apiBase}catalogv1/product/store/${storeHyph}/sku/${skusCsv}`;
+  const r=await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status);
+  const j=await r.json(); return { url, prices: pickFinalPrices(j), raw:j };
+}
+function decideMatch(ocrNums, finalPrices){
+  if(!ocrNums.length) return {status:'UNKNOWN', reason:'No OCR price found'};
+  if(!finalPrices.length) return {status:'UNKNOWN', reason:'No final_price found in API'};
+  const any = ocrNums.some(x=>finalPrices.includes(x));
+  return {status:any?'OK':'NOMATCH', reason:any?'Exact match found (final_price)':'No equal final_price found'};
+}
+
+/* ============ Rendering ============ */
+function pairRowHTML(row){
+  const badge = `<span class="badge ${row.status}">${row.status}</span>`;
+  const ocrLine = `<div class="meta"><strong>OCR:</strong> ${row.ocrPrices.length?row.ocrPrices.join(', '):'<em>none</em>'} <span class="ocr-src">[${row.ocrProvider}]</span></div>`;
+  const apiLine = row.apiOk
+    ? `<div class="meta"><strong>API final_price(s):</strong> ${row.apiPrices.slice(0,20).join(', ') || '<em>none</em>'}</div>`
+    : `<div class="meta" style="color:#b00020"><strong>API error:</strong> ${row.apiError}</div>`;
+  const imgBlock = row.image ? `<img class="thumb" src="${row.image}" alt="banner">`
+                             : `<div class="meta" style="color:#999">No parent image (child CMS may contain images)</div>`;
+  return `
+    <div class="pair">
+      <div class="left">
+        <div class="head">Banner</div>
+        ${imgBlock}
+        <div class="meta"><strong>Image URL:</strong> ${row.image ? `<a href="${row.image}" target="_blank">open</a>` : '-'}</div>
+      </div>
+      <div class="right">
+        <div class="head">Comparison ${badge}</div>
+        <div class="kv">
+          <div>Parent CMS:</div><div>${row.parentUrl ? `<a href="${row.parentUrl}" target="_blank">${row.parentUrl}</a>` : '-'}</div>
+          <div>Child CMS:</div><div>${row.childCmsUrl ? `<a href="${row.childCmsUrl}" target="_blank">${row.childCmsUrl}</a>` : '-'}</div>
+          <div>SKU API:</div><div>${row.productApiUrl ? `<a href="${row.productApiUrl}" target="_blank">${row.productApiUrl}</a>` : '-'}</div>
+        </div>
+        <div class="divider"></div>
+        ${ocrLine}
+        ${apiLine}
+        <div class="meta"><em>${row.reason||''}</em></div>
+      </div>
+    </div>
+  `;
+}
+function appendPair(row){ document.getElementById('pairs').insertAdjacentHTML('beforeend', pairRowHTML(row)); }
+function appendDiscovery(parentUrl, pairs){
+  const el=document.createElement('div');
+  el.innerHTML=`
+  <div class="pair" style="grid-template-columns:1fr">
+    <div class="left" style="border-right:none">
+      <div class="head">Parent: ${parentUrl}</div>
+      <div class="meta"><strong>Found CMS links:</strong> ${pairs.length}</div>
+      <div style="margin-top:6px">${pairs.slice(0,50).map(p=>`<span class="pill">${p.cmsSlug||'<em>unknown</em>'}</span>`).join(' ')}${pairs.length>50?' …':''}</div>
+    </div>
+  </div>`;
+  document.getElementById('discover').appendChild(el);
+}
+function clearResults(){
+  document.getElementById('discover').innerHTML='';
+  document.getElementById('pairs').innerHTML='';
+  document.getElementById('empty').style.display='none';
+}
+
+/* ============ Orchestrators ============ */
+async function run(){
+  clearResults();
+  const seeds=document.getElementById('cmsInput').value.trim().split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  if(!seeds.length){ alert('Provide at least one CMS page-v2 URL.'); return; }
+  document.getElementById('loading').style.display='block';
+  const enhance=document.getElementById('imgEnhance').checked;
+  const skuLimit=+document.getElementById('skuLimit').value || 24;
+
+  for(const parentUrl of seeds){
+    const apiBase=baseApi(parentUrl);
+    const store=deriveStore(parentUrl);
+    const storeHy=toHyphenStore(store);
+    const parentPrefix=parentUrl.substring(0,parentUrl.lastIndexOf('/')+1);
+
+    let parentJson;
+    try{ const r=await fetch(parentUrl); if(!r.ok) throw new Error('HTTP '+r.status); parentJson=await r.json(); }
+    catch(e){ console.error('Parent fetch failed:', e); continue; }
+
+    const pairs=extractImageCmsPairsFromParent(parentJson);
+    appendDiscovery(parentUrl, pairs);
+
+    for(const pair of pairs){
+      const childCmsUrl=`${parentPrefix}${pair.cmsSlug}`;
+      let ocrPrices=[], ocrProvider='-';
+      if(pair.image){
+        try{ const o=await ocrImage(pair.image, enhance); ocrPrices=o.prices||[]; ocrProvider=o.provider||'unknown'; }
+        catch{ ocrPrices=[]; ocrProvider='error'; }
+      }
+
+      let childJson;
+      try{
+        const r=await fetch(childCmsUrl); if(!r.ok) throw new Error('HTTP '+r.status);
+        childJson=await r.json();
+      }catch(e){
+        appendPair({ image:pair.image,parentUrl,childCmsUrl,productApiUrl:null,
+          ocrPrices,ocrProvider,apiOk:false,apiPrices:[],apiError:'Child CMS fetch failed',
+          status:'ERROR',reason:'Unable to fetch child CMS' });
+        continue;
+      }
+
+      const skus=extractSkusFromChildCMS(childJson, skuLimit);
+      if(!skus.length){
+        appendPair({ image:pair.image,parentUrl,childCmsUrl,productApiUrl:null,
+          ocrPrices,ocrProvider,apiOk:true,apiPrices:[],apiError:null,
+          status:'UNKNOWN',reason:'No SKUs found in child CMS' });
+        continue;
+      }
+
+      const skusCsv=skus.join(',');
+      let productApiUrl, apiPrices=[], apiOk=false, apiError=null;
+      try{
+        const got=await fetchProductFinalPrices(apiBase, storeHy, skusCsv);
+        productApiUrl=got.url; apiPrices=got.prices; apiOk=true;
+      }catch(e){ apiError=String(e); apiOk=false; }
+
+      const decision=decideMatch(ocrPrices, apiPrices);
+      appendPair({ image:pair.image,parentUrl,childCmsUrl,productApiUrl,
+        ocrPrices,ocrProvider,apiOk,apiPrices,apiError,
+        status:decision.status,reason:decision.reason });
+    }
+  }
+  document.getElementById('loading').style.display='none';
+  if(!document.querySelector('#pairs .pair')) document.getElementById('empty').style.display='block';
+}
+
+async function resolveManualTargetToCmsOrApi(line,parentUrlSample){
+  if(/^https?:\/\//i.test(line)) return { cmsUrl:null, apiUrl: line };
+  if(!parentUrlSample) return { cmsUrl:null, apiUrl:null };
+  const parentPrefix=parentUrlSample.substring(0,parentUrlSample.lastIndexOf('/')+1);
+  return { cmsUrl: parentPrefix + line, apiUrl: null };
+}
+async function runPairs(){
+  document.getElementById('loading').style.display='block';
+  const txt=document.getElementById('pairsInput').value.trim();
+  if(!txt){ alert('Add at least one "image || cmsSlugOrUrl" line.'); document.getElementById('loading').style.display='none'; return; }
+  const enhance=document.getElementById('imgEnhance').checked;
+  const skuLimit=+document.getElementById('skuLimit').value || 24;
+  const parentRef=document.getElementById('cmsInput').value.trim().split(/\r?\n/).map(s=>s.trim()).filter(Boolean)[0] || '';
+
+  for(const line of txt.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)){
+    const [img,target]=line.split('||').map(s=>s.trim()); if(!img||!target) continue;
+
+    let ocrPrices=[], ocrProvider='-';
+    try{ const o=await ocrImage(img, enhance); ocrPrices=o.prices||[]; ocrProvider=o.provider||'unknown'; }
+    catch{ ocrPrices=[]; ocrProvider='error'; }
+
+    const { cmsUrl, apiUrl } = await resolveManualTargetToCmsOrApi(target, parentRef);
+    const apiBase = parentRef ? baseApi(parentRef) : (apiUrl || '').split('/api/')[0] + '/api/';
+    const store   = parentRef ? deriveStore(parentRef) : 'sa_en';
+    const storeHy = toHyphenStore(store);
+
+    if(apiUrl){
+      let apiPrices=[], apiOk=false, apiError=null;
+      try{ const r=await fetch(apiUrl); if(!r.ok) throw new Error('HTTP '+r.status); const j=await r.json(); apiPrices=pickFinalPrices(j); apiOk=true; }
+      catch(e){ apiOk=false; apiError=String(e); }
+      const decision=decideMatch(ocrPrices, apiPrices);
+      appendPair({ image:img,parentUrl:parentRef||null,childCmsUrl:null,productApiUrl:apiUrl,
+        ocrPrices,ocrProvider,apiOk,apiPrices,apiError,status:decision.status,reason:decision.reason });
+      continue;
+    }
+
+    let childJson;
+    try{ const r=await fetch(cmsUrl); if(!r.ok) throw new Error('HTTP '+r.status); childJson=await r.json(); }
+    catch(e){
+      appendPair({ image:img,parentUrl:parentRef||null,childCmsUrl:cmsUrl,productApiUrl:null,
+        ocrPrices,ocrProvider,apiOk:false,apiPrices:[],apiError:'Child CMS fetch failed',
+        status:'ERROR',reason:'Unable to fetch child CMS' });
+      continue;
+    }
+    const skus=extractSkusFromChildCMS(childJson, skuLimit);
+    if(!skus.length){
+      appendPair({ image:img,parentUrl:parentRef||null,childCmsUrl:cmsUrl,productApiUrl:null,
+        ocrPrices,ocrProvider,apiOk:true,apiPrices:[],apiError:null,status:'UNKNOWN',reason:'No SKUs found in child CMS' });
+      continue;
+    }
+    const skusCsv=skus.join(',');
+    let productApiUrl, apiPrices=[], apiOk=false, apiError=null;
+    try{ const got=await fetchProductFinalPrices(apiBase, storeHy, skusCsv);
+         productApiUrl=got.url; apiPrices=got.prices; apiOk=true; }
+    catch(e){ apiOk=false; apiError=String(e); }
+    const decision=decideMatch(ocrPrices, apiPrices);
+    appendPair({ image:img,parentUrl:parentRef||null,childCmsUrl:cmsUrl,productApiUrl,
+      ocrPrices,ocrProvider,apiOk,apiPrices,apiError,status:decision.status,reason:decision.reason });
+  }
+
+  document.getElementById('loading').style.display='none';
+  if(!document.querySelector('#pairs .pair')) document.getElementById('empty').style.display='block';
+}
+
+/* Session & Clipboard */
+window.run=run; window.runPairs=runPairs;
+window.clearSession=function(){
+  document.getElementById('discover').innerHTML='';
+  document.getElementById('pairs').innerHTML='';
+  document.getElementById('empty').style.display='none';
+  document.getElementById('cmsInput').value='';
+  document.getElementById('pairsInput').value='';
+  document.getElementById('loading').style.display='none';
+};
+window.copyVisible=function(){
+  const rows=[...document.querySelectorAll('#pairs .pair')].map(p=>p.innerText.replace(/\n{2,}/g,'\n').trim()).join('\n\n---\n\n');
+  if(!rows){ alert('Nothing to copy.'); return; }
+  navigator.clipboard.writeText(rows).then(()=>alert('Copied!'));
+};
+</script>
+<!-- (optional) identify and/or alias primary action -->
+<script> window.QA_TOOL_ID='price_checker'; /* optional */ </script>
+<!-- include the bridge at the end -->
+<script src="qa_bridge.js"></script>
+
+</body>
+</html>

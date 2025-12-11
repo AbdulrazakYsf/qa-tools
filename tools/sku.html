@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Single SKU Link Checker</title>
+<style>
+ :root{
+   --blue:#007BFF;
+   --bg:#f4f7fa;
+   --card:#ffffff;
+   --radius:10px;
+   --shadow:0 4px 12px rgba(0,0,0,.1);
+   --ok:#2e7d32;
+   --warn:#d84315;
+   --err:#b00020;
+   --badge:#eceff1;
+   --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+ }
+ *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif}
+ body{
+   background:var(--bg);
+   min-height:100vh;
+   display:flex;
+   align-items:center;
+   justify-content:center;
+   padding:18px;
+   color:#222;
+ }
+ .container{
+   width:100%;max-width:980px;
+   background:var(--card);
+   border-radius:var(--radius);
+   box-shadow:var(--shadow);
+   padding:24px 26px 32px;
+   display:flex;
+   flex-direction:column;
+   gap:18px;
+ }
+ header{
+   display:flex;
+   align-items:center;
+   justify-content:space-between;
+   padding-bottom:12px;
+   border-bottom:2px solid var(--blue);
+ }
+ header h1{font-size:24px;color:var(--blue);margin:0}
+ header img{width:54px;height:54px}
+
+ label.main{font-weight:600;font-size:14px}
+
+ textarea{
+   width:100%;height:150px;
+   padding:12px 14px;
+   border:1px solid #cbd3dc;
+   border-radius:8px;
+   font-size:15px;
+   resize:vertical;
+ }
+
+ .controls{display:flex;flex-wrap:wrap;gap:10px}
+ button{
+   background:var(--blue);
+   border:none;
+   color:#fff;
+   padding:10px 18px;
+   font-size:15px;
+   border-radius:7px;
+   cursor:pointer;
+   display:inline-flex;
+   align-items:center;
+   gap:6px;
+   line-height:1.05;
+   transition:.25s;
+ }
+ button:hover{background:#005ed0}
+ button.secondary{background:#546e7a}
+ button.secondary:hover{background:#455a64}
+ button.copy{background:#00906d}
+ button.copy:hover{background:#007354}
+
+ #loading{display:none;font-weight:600;color:#f90}
+
+ .panel{
+   background:#f9fafb;
+   border:1px solid #dfe5eb;
+   border-radius:10px;
+   padding:20px 20px 26px;
+ }
+
+ .panel h3{margin:0 0 14px;font-size:20px;color:#333}
+
+ .filters{
+   display:flex;
+   flex-wrap:wrap;
+   gap:14px;
+   margin-bottom:12px;
+   align-items:flex-end;
+ }
+ .filters label{
+   font-size:14px;
+   font-weight:600;
+   color:#333;
+   display:flex;
+   flex-direction:column;
+   gap:6px;
+ }
+ select,input[type=text]{
+   min-width:210px;
+   padding:8px 10px;
+   border:1px solid #bfc9d3;
+   border-radius:6px;
+   font-size:14px;
+   background:#fff;
+ }
+ input::placeholder{color:#999}
+
+ ul#results{list-style:none;margin:0;padding:0}
+ ul#results li{
+   padding:10px 10px 12px;
+   border-bottom:1px solid #e3e8ee;
+   display:flex;
+   flex-direction:column;
+   gap:4px;
+   font-size:14px;
+   word-break:break-all;
+ }
+ ul#results li:last-child{border-bottom:none}
+
+ a{color:#0d47a1;text-decoration:none}
+ a:hover{text-decoration:underline}
+
+ .status-badge{
+   display:inline-block;
+   font-size:11px;
+   letter-spacing:.5px;
+   font-weight:700;
+   padding:3px 8px 4px;
+   border-radius:100px;
+   background:var(--badge);
+   color:#37474f;
+   vertical-align:middle;
+   font-family:var(--mono);
+ }
+ .ok   .status-badge{background:var(--ok);color:#fff}
+ .warn .status-badge{background:var(--warn);color:#fff}
+ .err  .status-badge{background:var(--err);color:#fff}
+
+ .meta-line{font-size:12px;color:#555}
+ .empty-msg{color:#d32f2f;font-weight:600;margin:6px 4px 2px}
+
+ .legend{
+   margin-top:18px;
+   font-size:12.5px;
+   line-height:1.5;
+   color:#455a64;
+   display:flex;
+   flex-direction:column;
+   gap:4px;
+ }
+ .legend .row{display:flex;align-items:center;gap:8px}
+
+ footer{margin-top:22px;text-align:center;font-size:13px;color:#888}
+
+ @media(max-width:640px){
+   .filters label{width:100%}
+   select,input[type=text]{min-width:unset;width:100%}
+   button{flex:1 1 auto}
+ }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div class="container">
+  <header>
+    <img src="crawler.png" alt="Logo">
+    <h1>Single SKU Link Checker</h1>
+  </header>
+
+  <label for="urlInput" class="main">Enter page-v2 URLs (one per line):</label>
+  <textarea id="urlInput" placeholder="https://www.jarir.com/api/v2/sa_en/cmspage/page-v2/123"></textarea>
+
+  <div class="controls">
+    <button onclick="run()">Fetch JSON & Build SKU Links</button>
+    <button class="secondary" onclick="clearSession()">Clear Session</button>
+    <button class="copy" onclick="copyVisible()">Copy Visible Links</button>
+  </div>
+
+  <div id="loading">Processing… please wait</div>
+
+  <div class="panel">
+    <h3>Generated SKU Links</h3>
+
+    <div class="filters">
+      <label>
+        Status Filter
+        <select id="statusFilter" onchange="applyFilters()">
+          <option value="all">Show All</option>
+          <option value="OK">OK</option>
+          <option value="Warning">Warning</option>
+          <option value="Error">Error</option>
+        </select>
+      </label>
+      <label>
+        Parent URL Filter
+        <input id="parentFilter" type="text" placeholder="part of parent URL" oninput="applyFilters()">
+      </label>
+    </div>
+
+    <ul id="results"></ul>
+    <p id="empty" class="empty-msg" style="display:none;">No SKU links found for current filters.</p>
+
+    <div class="legend">
+      <div class="row"><span class="status-badge ok">OK</span> <strong>OK</strong> – Hits array contains one or more products.</div>
+      <div class="row"><span class="status-badge warn">WARN</span> <strong>Warning</strong> – Hits array empty for that SKU.</div>
+      <div class="row"><span class="status-badge err">ERR</span> <strong>Error</strong> – Fetch / parse issue (shown only in *Show All* or *Error* filter).</div>
+    </div>
+  </div>
+
+  <footer>© 2024 Single SKU Link Checker</footer>
+</div>
+
+<script>
+/* ─────────────── State / Persistence ─────────────── */
+const rows=[];                  // {link,parent,status}
+const seenParents=new Set();    // parent json URLs already fetched
+const seenLinks=new Set();      // product detail links
+const COOKIE_KEY='singleSkuLinksV1';
+
+/* Cookie helpers */
+function setCookie(n,v,d){const e=new Date(Date.now()+d*864e5).toUTCString();document.cookie=`${n}=${encodeURIComponent(v)}; expires=${e}; path=/`;}
+function getCookie(n){return document.cookie.split('; ').reduce((r,v)=>{const p=v.split('=');return p[0]===n?decodeURIComponent(p[1]):r},'');}
+function deleteCookie(n){setCookie(n,'',-1);}
+
+function saveRows(){setCookie(COOKIE_KEY,JSON.stringify(rows),7);}
+function loadRows(){
+  const c=getCookie(COOKIE_KEY);
+  if(!c) return;
+  try{
+    JSON.parse(c).forEach(r=>{
+      rows.push(r);
+      seenParents.add(r.parent);
+      seenLinks.add(r.link);
+    });
+  }catch{}
+}
+
+/* ─────────────── Core Flow ─────────────── */
+async function run(){
+  const seeds=document.getElementById('urlInput').value.trim().split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  if(!seeds.length){alert('Please enter at least one valid URL.');return;}
+  setLoading(true);
+
+  for(const parentUrl of seeds){
+    if(seenParents.has(parentUrl)) continue;
+    seenParents.add(parentUrl);
+    try{
+      const r=await fetch(parentUrl);
+      if(!r.ok) throw new Error('Network response was not ok');
+      const j=await r.json();
+      const skus=extractSkus(j);
+      const {base1,store}=splitBase(parentUrl);
+
+      if(!skus.length){
+        // Insert a placeholder Warning row
+        rows.push({link:'No SKU found',parent:parentUrl,status:'Warning'});
+        continue;
+      }
+
+      skus.forEach(sku=>{
+        const link=`${base1}catalogv1/product/store/${store}/sku/${sku}`;
+        if(seenLinks.has(link)) return;
+        seenLinks.add(link);
+        rows.push({link,parent:parentUrl,status:'PENDING'});
+      });
+
+    }catch(e){
+      rows.push({link:parentUrl,parent:parentUrl,status:'Error'});
+      console.error(e);
+    }
+  }
+
+  await validatePending();
+  saveRows();
+  setLoading(false);
+  render();
+  applyFilters();
+}
+
+/* ─────────────── Helpers ─────────────── */
+function splitBase(u){
+  const base1=u.split('/api')[0]+'/api/';
+  const store=u.split('/')[5].replace('_','-');
+  return {base1,store};
+}
+
+function extractSkus(json){
+  const items=json?.data?.cms_items?.items||[];
+  const out=[];
+  items.forEach(({item})=>{
+    item.split('||').forEach(entry=>{
+      const parts=entry.split(',');
+      if(parts[1]==='product' && parts[2]) out.push(parts[2].trim());
+    });
+  });
+  return [...new Set(out.filter(Boolean))];
+}
+
+async function validatePending(){
+  for(const row of rows){
+    if(row.status!=='PENDING') continue;
+    try{
+      const r=await fetch(row.link);
+      if(!r.ok){row.status='Error';continue;}
+      const j=await r.json();
+      const hits=j?.hits?.hits || j?.data?.hits?.hits || [];
+      row.status=hits.length>0?'OK':'Warning';
+    }catch{
+      row.status='Error';
+    }
+  }
+}
+
+/* ─────────────── UI ─────────────── */
+function setLoading(on){document.getElementById('loading').style.display=on?'block':'none';}
+
+function render(){
+  const ul=document.getElementById('results');
+  ul.innerHTML='';
+  rows.forEach(({link,parent,status})=>{
+    const li=document.createElement('li');
+    li.dataset.status=status;
+    li.dataset.parent=parent.toLowerCase();
+    let cls=''; if(status==='OK') cls='ok'; else if(status==='Warning') cls='warn'; else if(status==='Error') cls='err';
+    li.className=cls;
+
+    if(link.startsWith('http')){
+      li.innerHTML=`
+        <div>
+          <a href="${link}" target="_blank">${link}</a>
+          <span class="status-badge ${cls}">${status==='Warning'?'WARN':status.toUpperCase()}</span>
+        </div>
+        <div class="meta-line">Parent: ${parent}</div>`;
+    }else{
+      // placeholder (No SKU found)
+      li.innerHTML=`<div>${link} <span class="status-badge warn">WARN</span></div>
+                    <div class="meta-line">Parent: ${parent}</div>`;
+    }
+    ul.appendChild(li);
+  });
+}
+
+/* Filtering */
+function applyFilters(){
+  const want=document.getElementById('statusFilter').value;
+  const term=document.getElementById('parentFilter').value.trim().toLowerCase();
+  let visible=0;
+  document.querySelectorAll('#results li').forEach(li=>{
+    const st=li.dataset.status;
+    const parent=li.dataset.parent||'';
+    let show=false;
+    if(want==='all') show=true;
+    else if(want==='OK' && st==='OK') show=true;
+    else if(want==='Warning' && st==='Warning') show=true;
+    else if(want==='Error' && st==='Error') show=true;
+    if(show && term && !parent.includes(term)) show=false;
+    li.style.display=show?'':'none';
+    if(show) visible++;
+  });
+  document.getElementById('empty').style.display=visible?'none':'block';
+}
+
+/* Copy visible */
+function copyVisible(){
+  const txt=[...document.querySelectorAll('#results li')]
+    .filter(li=>li.style.display!=='none')
+    .map(li=>{
+      const a=li.querySelector('a');
+      return a?a.href:'';
+    })
+    .filter(Boolean)
+    .join('\n');
+  if(!txt){alert('Nothing to copy.');return;}
+  navigator.clipboard.writeText(txt).then(()=>alert('Copied!'));
+}
+
+/* Clear Session */
+function clearSession(){
+  deleteCookie(COOKIE_KEY);
+  rows.length=0;
+  seenParents.clear();
+  seenLinks.clear();
+  document.getElementById('results').innerHTML='';
+  document.getElementById('empty').style.display='none';
+  document.getElementById('statusFilter').value='all';
+  document.getElementById('parentFilter').value='';
+  document.getElementById('urlInput').value='';
+  setLoading(false);
+}
+
+/* Initial restore */
+loadRows();
+render();
+applyFilters();
+</script>
+<!-- (optional) identify and/or alias primary action -->
+<script> window.QA_TOOL_ID='sku'; /* optional */ </script>
+<!-- include the bridge at the end -->
+<script src="qa_bridge.js"></script>
+
+</body>
+</html>
