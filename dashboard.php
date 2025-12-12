@@ -8179,41 +8179,28 @@ $TOOL_DEFS = [
         alert('Configuration name and tool are required.');
         return;
       }
-
-      document.getElementById('cfg-save-btn').addEventListener('click', async () => {
-        const id = document.getElementById('cfg-id').value || null;
-        const name = document.getElementById('cfg-name').value.trim();
-        const tool = document.getElementById('cfg-tool-code').value;
-        const inputs = document.getElementById('cfg-inputs').value.trim();
-        const enabled = document.getElementById('cfg-enabled').checked;
-
-        if (!name || !tool) {
-          alert('Configuration name and tool are required.');
-          return;
-        }
-
-        const ownerSel = document.getElementById('cfg-owner');
-        let ownerId = undefined;
-        // If admin dropdown visible, capture selection
-        if (ownerSel && ownerSel.offsetParent !== null) {
+      
+      const ownerSel = document.getElementById('cfg-owner');
+      let ownerId = undefined;
+      if (ownerSel && ownerSel.offsetParent !== null) {
           ownerId = ownerSel.value === "" ? null : parseInt(ownerSel.value);
-        }
+      }
 
-        const payload = {
-          id: id, tool_code: tool, config_name: name,
-          config: { inputs: inputs }, is_enabled: enabled ? 1 : 0
-        };
-        if (ownerId !== undefined) {
+      const payload = {
+        id: id, tool_code: tool, config_name: name,
+        config: { inputs: inputs }, is_enabled: enabled ? 1 : 0
+      };
+      if (ownerId !== undefined) {
           payload.owner_id = ownerId;
-        }
+      }
 
-        await api('save-config', payload);
+      await api('save-config', payload);
 
-        document.getElementById('config-form').reset();
-        document.getElementById('cfg-id').value = '';
-        document.getElementById('cfg-enabled').checked = true;
-        await loadConfigs();
-      });
+      document.getElementById('config-form').reset();
+      document.getElementById('cfg-id').value = '';
+      document.getElementById('cfg-enabled').checked = true;
+      await loadConfigs();
+    });
 
       document.getElementById('cfg-reset-btn').addEventListener('click', () => {
         document.getElementById('config-form').reset();
