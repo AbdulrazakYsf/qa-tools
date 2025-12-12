@@ -6470,6 +6470,43 @@ $TOOL_DEFS = [
       margin: 0;
       color: #1a3a57;
     }
+
+    /* Profile Dropdown */
+    .profile-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      width: 180px;
+      background: #fff;
+      border: 1px solid #e1e4e8;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      z-index: 1001;
+      overflow: hidden;
+      margin-top: 5px;
+    }
+
+    .profile-dropdown.active {
+      display: block;
+    }
+
+    .dropdown-item {
+      padding: 10px 16px;
+      font-size: 14px;
+      color: #333;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+      transition: background 0.1s;
+    }
+
+    .dropdown-item:last-child {
+      border-bottom: none;
+    }
+
+    .dropdown-item:hover {
+      background: #f8f9fa;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -6481,12 +6518,27 @@ $TOOL_DEFS = [
         <h1>QA Automation Dashboard</h1>
         <small>All tools & dashboard in a single PHP file</small>
       </div>
-    <div class="user-profile" id="profile-trigger" style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+      <div class="user-profile" id="profile-trigger"
+        style="display:flex; align-items:center; gap:10px; cursor:pointer;position:relative;">
         <div style="text-align:right;">
-             <div style="font-weight:600; font-size:14px;" id="header-username"><?php echo htmlspecialchars($currentUser['name'] ?? 'Guest'); ?></div>
-             <div style="font-size:11px; color:var(--muted); text-transform:uppercase;"><?php echo htmlspecialchars($currentUser['role'] ?? 'Viewer'); ?></div>
+          <div style="font-weight:600; font-size:14px;" id="header-username">
+            <?php echo htmlspecialchars($currentUser['name'] ?? 'Guest'); ?></div>
+          <div style="font-size:11px; color:var(--muted); text-transform:uppercase;">
+            <?php echo htmlspecialchars($currentUser['role'] ?? 'Viewer'); ?></div>
         </div>
-        <img id="header-avatar" src="<?php echo htmlspecialchars($currentUser['avatar_url'] ?? 'https://ui-avatars.com/api/?name=' . urlencode($currentUser['name'] ?? 'User')); ?>" style="width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+        <img id="header-avatar"
+          src="<?php echo htmlspecialchars($currentUser['avatar_url'] ?? 'https://ui-avatars.com/api/?name=' . urlencode($currentUser['name'] ?? 'User')); ?>"
+          style="width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+        
+        <!-- Dropdown Menu -->
+        <div class="profile-dropdown" id="profile-dropdown">
+            <div class="dropdown-item" id="menu-edit-profile">
+                <span>Edit Profile</span>
+            </div>
+            <div class="dropdown-item" onclick="location.href='logout.php'" style="color:#c62828;">
+                <span>Logout</span>
+            </div>
+        </div>
       </div>
     </header>
 
@@ -6643,9 +6695,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                        <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                          <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                        </option>
+                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                    </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -6775,25 +6827,30 @@ $TOOL_DEFS = [
       </div>
       <div class="modal-body" style="padding:20px;">
         <form id="profile-form">
-            <div style="text-align:center; margin-bottom:20px;">
-                <img id="profile-preview" src="" style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:1px solid #ddd;">
-            </div>
-            <div class="form-group" style="margin-bottom:15px;">
-                <label style="display:block; font-size:13px; margin-bottom:5px;">Name</label>
-                <input type="text" id="prof-name" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
-            </div>
-             <div class="form-group" style="margin-bottom:15px;">
-                <label style="display:block; font-size:13px; margin-bottom:5px;">Avatar URL</label>
-                <input type="text" id="prof-avatar" placeholder="https://..." style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
-            </div>
-             <div class="form-group" style="margin-bottom:20px;">
-                <label style="display:block; font-size:13px; margin-bottom:5px;">New Password (Optional)</label>
-                <input type="password" id="prof-password" placeholder="Leave blank to keep current" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
-            </div>
-            <div style="display:flex; gap:10px;">
-                <button type="button" class="btn-primary" id="save-profile-btn" style="flex:1;">Save Changes</button>
-                <button type="button" class="btn-ghost" onclick="location.href='logout.php'" style="flex:1; border-color:#ffcdd2; color:#c62828;">Logout</button>
-            </div>
+          <div style="text-align:center; margin-bottom:20px;">
+            <img id="profile-preview" src=""
+              style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:1px solid #ddd;">
+          </div>
+          <div class="form-group" style="margin-bottom:15px;">
+            <label style="display:block; font-size:13px; margin-bottom:5px;">Name</label>
+            <input type="text" id="prof-name"
+              style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+          </div>
+          <div class="form-group" style="margin-bottom:15px;">
+            <label style="display:block; font-size:13px; margin-bottom:5px;">Avatar URL</label>
+            <input type="text" id="prof-avatar" placeholder="https://..."
+              style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+          </div>
+          <div class="form-group" style="margin-bottom:20px;">
+            <label style="display:block; font-size:13px; margin-bottom:5px;">New Password (Optional)</label>
+            <input type="password" id="prof-password" placeholder="Leave blank to keep current"
+              style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button type="button" class="btn-primary" id="save-profile-btn" style="flex:1;">Save Changes</button>
+            <button type="button" class="btn-ghost" onclick="location.href='logout.php'"
+              style="flex:1; border-color:#ffcdd2; color:#c62828;">Logout</button>
+          </div>
         </form>
       </div>
     </div>
@@ -6846,7 +6903,7 @@ $TOOL_DEFS = [
   </div>
 
   <script>
-    const TOOL_DEFS= <?php echo json_encode($TOOL_DEFS, JSON_UNESCAPED_UNICODE); ?>;
+    const TOOL_DEFS = <?php echo json_encode($TOOL_DEFS, JSON_UNESCAPED_UNICODE); ?>;
     const TOOL_HTML = <?php echo json_encode($TOOLS_HTML, JSON_UNESCAPED_UNICODE); ?>;
 
     let ACTIVE_TOOL = null;
@@ -7734,34 +7791,52 @@ $TOOL_DEFS = [
     enforceRoleUI();
 
     /* Profile Logic */
+    /* Profile Logic */
     const profileModal = document.getElementById('profile-modal');
-    
-    document.getElementById('profile-trigger').addEventListener('click', async () => {
-        const u = await api('get-profile');
-        if(u && u.id) {
-            document.getElementById('prof-name').value = u.name;
-            document.getElementById('prof-avatar').value = u.avatar_url || '';
-            document.getElementById('profile-preview').src = u.avatar_url || `https://ui-avatars.com/api/?name=${u.name}`;
-            profileModal.classList.add('active');
-        }
+    const profileDropdown = document.getElementById('profile-dropdown');
+
+    // Toggle Dropdown
+    document.getElementById('profile-trigger').addEventListener('click', (e) => {
+      // Only toggle if not clicking inside the dropdown
+      if (e.target.closest('.profile-dropdown')) return;
+      profileDropdown.classList.toggle('active');
+      e.stopPropagation();
+    });
+
+    // Close Dropdown when clicking outside
+    document.addEventListener('click', () => {
+      profileDropdown.classList.remove('active');
+    });
+
+    // Edit Profile Click
+    document.getElementById('menu-edit-profile').addEventListener('click', async () => {
+      profileDropdown.classList.remove('active'); // Close menu
+
+      const u = await api('get-profile');
+      if (u && u.id) {
+        document.getElementById('prof-name').value = u.name;
+        document.getElementById('prof-avatar').value = u.avatar_url || '';
+        document.getElementById('profile-preview').src = u.avatar_url || `https://ui-avatars.com/api/?name=${u.name}`;
+        profileModal.classList.add('active'); // Open Modal
+      }
     });
 
     function closeProfileModal() {
-        profileModal.classList.remove('active');
+      profileModal.classList.remove('active');
     }
 
     document.getElementById('save-profile-btn').addEventListener('click', async () => {
-        const name = document.getElementById('prof-name').value;
-        const avatar = document.getElementById('prof-avatar').value;
-        const pass = document.getElementById('prof-password').value;
-        
-        const res = await api('update-profile', { name, avatar_url: avatar, password: pass });
-        if(res.ok) {
-            alert('Profile updated!');
-            location.reload();
-        } else {
-            alert('Error: ' + (res.error || 'Unknown'));
-        }
+      const name = document.getElementById('prof-name').value;
+      const avatar = document.getElementById('prof-avatar').value;
+      const pass = document.getElementById('prof-password').value;
+
+      const res = await api('update-profile', { name, avatar_url: avatar, password: pass });
+      if (res.ok) {
+        alert('Profile updated!');
+        location.reload();
+      } else {
+        alert('Error: ' + (res.error || 'Unknown'));
+      }
     });
 
     /* Initial */
