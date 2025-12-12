@@ -418,10 +418,42 @@ if (isset($_GET['api'])) {
         break;
 
       case 'stats':
-        $total = (int) $db->query("SELECT COUNT(*) AS c FROM qa_test_runs")->fetch()['c'];
-        $passed = (int) $db->query("SELECT COUNT(*) AS c FROM qa_test_runs WHERE status='passed'")->fetch()['c'];
-        $failed = (int) $db->query("SELECT COUNT(*) AS c FROM qa_test_runs WHERE status='failed'")->fetch()['c'];
-        $open = (int) $db->query("SELECT COALESCE(SUM(open_issues),0) AS s FROM qa_test_runs")->fetch()['s'];
+        $user = current_user();
+        $targetUid = null;
+
+        // If Admin/Viewer, allow filtering by specific user if provided
+        if (in_array($user['role'], ['admin', 'viewer'])) {
+          if (!empty($input['user_id'])) {
+            $targetUid = $input['user_id'];
+          }
+        } else {
+          // Testers always restricted to self
+          $targetUid = $user['id'];
+        }
+
+        $where = "WHERE 1=1";
+        $params = [];
+        if ($targetUid) {
+          $where .= " AND user_id = ?";
+          $params[] = $targetUid;
+        }
+
+        // Helper for stats
+        $getStat = function ($sql, $p) use ($db) {
+          $s = $db->prepare($sql);
+          $s->execute($p);
+          return (int) $s->fetch()['c'];
+        };
+
+        $total = $getStat("SELECT COUNT(*) AS c FROM qa_test_runs $where", $params);
+        $passed = $getStat("SELECT COUNT(*) AS c FROM qa_test_runs $where AND status='passed'", $params);
+        $failed = $getStat("SELECT COUNT(*) AS c FROM qa_test_runs $where AND status='failed'", $params);
+
+        // Open Issues Sum
+        $s = $db->prepare("SELECT COALESCE(SUM(open_issues),0) AS s FROM qa_test_runs $where");
+        $s->execute($params);
+        $open = (int) $s->fetch()['s'];
+
         echo json_encode(['total_runs' => $total, 'passed' => $passed, 'failed' => $failed, 'open_issues' => $open]);
         break;
 
@@ -6966,9 +6998,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                    </option>
+                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                  </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -7260,7 +7292,8 @@ $TOOL_DEFS = [
     let chartRunStatus = null;
     let chartPassTrend = null;
 
-    function computeRunAggregates() {
+    function computeRunAggregates(list) {
+      const target = list || RUNS;
       const agg = {
         totalTests: 0,
         passed: 0,
@@ -7268,7 +7301,7 @@ $TOOL_DEFS = [
         open: 0,
         statusCounts: {}
       };
-      RUNS.forEach(r => {
+      target.forEach(r => {
         const total = Number(r.total_tests || 0);
         const passed = Number(r.passed || 0);
         const failed = Number(r.failed || 0);
@@ -7283,9 +7316,10 @@ $TOOL_DEFS = [
       return agg;
     }
 
-    function updateChartsFromRuns() {
+    function updateChartsFromRuns(runList = null) {
       if (typeof Chart === 'undefined') return;
-      const agg = computeRunAggregates();
+      const listToUse = runList || RUNS;
+      const agg = computeRunAggregates(listToUse);
 
       const passFailCanvas = document.getElementById('chart-pass-fail');
       if (passFailCanvas) {
@@ -7818,6 +7852,9 @@ $TOOL_DEFS = [
 
       const uid = document.getElementById('filter-user').value;
 
+      // Update Database Stats (Cards) based on selected User
+      loadStats(uid);
+
       const filtered = RUNS.filter(r => {
         // Status filter
         if (st && (r.status || '').toLowerCase() !== st) return false;
@@ -7826,7 +7863,7 @@ $TOOL_DEFS = [
           const runTools = (r.tools || '').split(',');
           if (!runTools.includes(tc)) return false;
         }
-        // User Filter
+        // User Filter (Client side for the loaded batch)
         if (uid) {
           if (r.user_id != uid) return false;
         }
@@ -7834,6 +7871,9 @@ $TOOL_DEFS = [
       });
       document.getElementById('filtered-total').textContent = filtered.length;
       renderRunsTable(filtered);
+      
+      // Update Charts based on the VISIBLE set (Filtered)
+      updateChartsFromRuns(filtered);
     }
 
     function downloadRunsCSV() {
@@ -7998,7 +8038,7 @@ $TOOL_DEFS = [
     /* Configs */
     async function loadConfigs() {
       CONFIGS = await api('list-configs');
-      const curUser = await api('get-profile'); 
+      const curUser = await api('get-profile');
       const curUid = curUser.id;
 
       const tbody = document.querySelector('#configs-table tbody');
@@ -8011,12 +8051,12 @@ $TOOL_DEFS = [
         } catch (e) { }
 
         let ownerBadge = '';
-        if(!cfg.user_id) {
-           ownerBadge = '<span class="badge" style="background:#2196f3; color:white;">Global</span>';
+        if (!cfg.user_id) {
+          ownerBadge = '<span class="badge" style="background:#2196f3; color:white;">Global</span>';
         } else if (cfg.user_id == curUid) {
-           ownerBadge = '<span class="badge" style="background:#4caf50; color:white;">You</span>';
+          ownerBadge = '<span class="badge" style="background:#4caf50; color:white;">You</span>';
         } else {
-           ownerBadge = `<span class="badge" style="background:#eee; color:#555;">${cfg.user_name || 'User ' + cfg.user_id}</span>`;
+          ownerBadge = `<span class="badge" style="background:#eee; color:#555;">${cfg.user_name || 'User ' + cfg.user_id}</span>`;
         }
 
         const tr = document.createElement('tr');
@@ -8154,12 +8194,17 @@ $TOOL_DEFS = [
     });
 
     /* Stats */
-    async function loadStats() {
-      const s = await api('stats');
-      document.getElementById('stat-total').textContent = s.total_runs ?? 0;
-      document.getElementById('stat-passed').textContent = s.passed ?? 0;
-      document.getElementById('stat-failed').textContent = s.failed ?? 0;
-      document.getElementById('stat-open').textContent = s.open_issues ?? 0;
+    async function loadStats(userId = null) {
+      try {
+        const payload = userId ? { user_id: userId } : {};
+        const s = await api('stats', payload);
+        document.getElementById('stat-total').textContent = s.total_runs;
+        document.getElementById('stat-passed').textContent = s.passed;
+        document.getElementById('stat-failed').textContent = s.failed;
+        document.getElementById('stat-open').textContent = s.open_issues;
+      } catch (e) {
+        console.error('Stats error:', e);
+      }
     }
     async function enforceRoleUI() {
       if (typeof CURRENT_USER_ROLE === 'undefined') return;
