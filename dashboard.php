@@ -60,7 +60,10 @@ if (isset($_GET['api'])) {
     switch ($action) {
       /* Configs */
       case 'list-configs':
-        $stmt = $db->query("SELECT * FROM qa_tool_configs ORDER BY created_at DESC");
+        $uid = current_user()['id'];
+        // Prioritize user-specific configs over global ones
+        $stmt = $db->prepare("SELECT * FROM qa_tool_configs WHERE user_id=? OR user_id IS NULL ORDER BY (user_id IS NOT NULL) DESC, created_at DESC");
+        $stmt->execute([$uid]);
         echo json_encode($stmt->fetchAll());
         break;
 
@@ -71,6 +74,7 @@ if (isset($_GET['api'])) {
         $config_name = $input['config_name'] ?? '';
         $cfg = $input['config'] ?? [];
         $is_enabled = !empty($input['is_enabled']) ? 1 : 0;
+        $user_id = current_user()['id'];
 
         if (!$tool_code || !$config_name) {
           http_response_code(400);
@@ -79,11 +83,12 @@ if (isset($_GET['api'])) {
         }
         $cfgJson = json_encode($cfg, JSON_UNESCAPED_UNICODE);
         if ($id) {
-          $stmt = $db->prepare("UPDATE qa_tool_configs SET tool_code=?, config_name=?, config_json=?, is_enabled=? WHERE id=?");
-          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled, $id]);
+          // Update: Enforce user ownership? For now, just update.
+          $stmt = $db->prepare("UPDATE qa_tool_configs SET tool_code=?, config_name=?, config_json=?, is_enabled=?, user_id=? WHERE id=?");
+          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled, $user_id, $id]);
         } else {
-          $stmt = $db->prepare("INSERT INTO qa_tool_configs (tool_code, config_name, config_json, is_enabled) VALUES (?,?,?,?)");
-          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled]);
+          $stmt = $db->prepare("INSERT INTO qa_tool_configs (tool_code, config_name, config_json, is_enabled, user_id) VALUES (?,?,?,?,?)");
+          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled, $user_id]);
           $id = $db->lastInsertId();
         }
         echo json_encode(['ok' => true, 'id' => $id]);
@@ -6907,9 +6912,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                  </option>
+                      <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                        <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                      </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -7747,9 +7752,9 @@ $TOOL_DEFS = [
         tbody.appendChild(tr);
       });
       // Reset bulk selection UI when re-rendering
-      updateBulkAction(); 
+      updateBulkAction();
       const selectAll = document.getElementById('select-all-runs');
-      if(selectAll) selectAll.checked = false;
+      if (selectAll) selectAll.checked = false;
     }
 
     function applyRunFilters() {

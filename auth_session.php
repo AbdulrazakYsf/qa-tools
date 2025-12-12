@@ -84,6 +84,28 @@ function get_db_auth()
     } catch (Exception $e) {
     }
 
+    // Ensure qa_tool_configs table exists
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS qa_tool_configs (
+          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+          tool_code VARCHAR(50) NOT NULL,
+          config_name VARCHAR(100),
+          config_json TEXT,
+          is_enabled TINYINT(1) DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM qa_tool_configs LIKE 'user_id'")->fetchAll();
+        if (count($cols) == 0) {
+            $pdo->exec("ALTER TABLE qa_tool_configs ADD COLUMN user_id INT UNSIGNED DEFAULT NULL AFTER id");
+            $pdo->exec("CREATE INDEX idx_config_user ON qa_tool_configs(user_id)");
+            $pdo->exec("CREATE INDEX idx_config_tool ON qa_tool_configs(tool_code)");
+        }
+    } catch (Exception $e) {
+    }
+
     return $pdo;
 }
 
