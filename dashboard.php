@@ -107,8 +107,19 @@ if (isset($_GET['api'])) {
         }
         $cfgJson = json_encode($cfg, JSON_UNESCAPED_UNICODE);
 
+        // Determine Owner
+        // Default: Current User
+        $ownerId = $currUid;
+
+        // If Admin, check if they provided an owner_id (null for Global, or specific ID)
+        if ($currentUser['role'] === 'admin') {
+          if (array_key_exists('owner_id', $input)) {
+            $ownerId = $input['owner_id']; // Can be null (Global) or numeric
+          }
+        }
+
         if ($id) {
-          // Fetch existing to preserve user_id and check permissions
+          // Fetch existing to check permissions
           $existing = $db->prepare("SELECT user_id FROM qa_tool_configs WHERE id=?");
           $existing->execute([$id]);
           $row = $existing->fetch();
@@ -118,31 +129,29 @@ if (isset($_GET['api'])) {
             break;
           }
 
-          $ownerId = $row['user_id'];
+          $prevOwner = $row['user_id'];
 
-          // Permission Check: Admin can edit anyone. Testers only their own.
-          // (Global configs user_id=NULL? If Tester edits Global, do we fork it? 
-          //  For now, assume Global configs are Admin-only to edit, or Testers can edit if they created it?
-          //  Let's allow Admin to edit anything. 
-          //  Testers can only edit if ownerId == currUid.
-
-          if ($currentUser['role'] !== 'admin' && $ownerId != $currUid) {
-            // If trying to edit a Global or another user's config -> Fork it (Create New)?
-            // The UI sends ID if editing. If we want to support "Copy", UI should clear ID.
-            // If user tries to Save an existing config they don't own, block it.
+          // Permission Check:
+          // Admin can edit anything.
+          // Tester can ONLY edit their own.
+          if ($currentUser['role'] !== 'admin' && $prevOwner != $currUid) {
             http_response_code(403);
-            echo json_encode(['error' => 'Access Denied: You cannot edit this configuration. Clone it instead.']);
+            echo json_encode(['error' => 'Access Denied: You can only edit your own configurations.']);
             break;
           }
 
-          $stmt = $db->prepare("UPDATE qa_tool_configs SET tool_code=?, config_name=?, config_json=?, is_enabled=? WHERE id=?");
-          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled, $id]);
-          // Note: We do NOT update user_id. Ownership stays.
+          // If Tester is saving, FORCE owner to remain themselves (cannot steal ownership or make global)
+          if ($currentUser['role'] !== 'admin') {
+            $ownerId = $prevOwner; // Keep original owner (which we verified is them)
+          }
+
+          $stmt = $db->prepare("UPDATE qa_tool_configs SET tool_code=?, config_name=?, config_json=?, is_enabled=?, user_id=? WHERE id=?");
+          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled, $ownerId, $id]);
 
         } else {
-          // New Config: Assign to current user
+          // INSERT
           $stmt = $db->prepare("INSERT INTO qa_tool_configs (tool_code, config_name, config_json, is_enabled, user_id) VALUES (?,?,?,?,?)");
-          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled, $currUid]);
+          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled, $ownerId]);
           $id = $db->lastInsertId();
         }
         echo json_encode(['ok' => true, 'id' => $id]);
@@ -151,8 +160,21 @@ if (isset($_GET['api'])) {
       case 'delete-config':
         require_role(['admin', 'tester']);
         if (!empty($input['id'])) {
+          $id = $input['id'];
+          // Check Perms
+          $user = current_user();
+          if ($user['role'] !== 'admin') {
+            $chk = $db->prepare("SELECT user_id FROM qa_tool_configs WHERE id=?");
+            $chk->execute([$id]);
+            $c = $chk->fetch();
+            if (!$c || $c['user_id'] != $user['id']) {
+              http_response_code(403);
+              echo json_encode(['error' => 'Access Denied']);
+              break;
+            }
+          }
           $stmt = $db->prepare("DELETE FROM qa_tool_configs WHERE id=?");
-          $stmt->execute([$input['id']]);
+          $stmt->execute([$id]);
         }
         echo json_encode(['ok' => true]);
         break;
@@ -7006,6 +7028,17 @@ $TOOL_DEFS = [
             </div>
           </div>
 
+          <!-- Owner Selection (Admin Only - Hidden by default) -->
+          <div class="form-grid" id="cfg-owner-wrapper" style="margin-top:14px; display:none;">
+            <div class="form-field">
+              <label>Owner (Admin Only)</label>
+              <select id="cfg-owner">
+                <option value="">Global (Everyone)</option>
+                <!-- Populated via JS -->
+              </select>
+            </div>
+          </div>
+
           <div class="form-grid" style="margin-top:14px;">
             <div class="form-field" style="grid-column:1 / -1;">
               <label>Target URLs / JSON / Inputs</label>
@@ -7871,7 +7904,7 @@ $TOOL_DEFS = [
       });
       document.getElementById('filtered-total').textContent = filtered.length;
       renderRunsTable(filtered);
-      
+
       // Update Charts based on the VISIBLE set (Filtered)
       updateChartsFromRuns(filtered);
     }
@@ -8041,6 +8074,22 @@ $TOOL_DEFS = [
       const curUser = await api('get-profile');
       const curUid = curUser.id;
 
+      const isAdmin = (curUser.role === 'admin');
+
+      // Populate Owner Dropdown if Admin
+      const ownerSel = document.getElementById('cfg-owner');
+      const ownerWrap = document.getElementById('cfg-owner-wrapper');
+      if (isAdmin && ownerSel && ownerSel.options.length <= 1) {
+        const allUsers = await api('list-users');
+        allUsers.forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.id;
+          opt.innerText = u.name + ' (User)';
+          ownerSel.appendChild(opt);
+        });
+        ownerWrap.style.display = 'block';
+      }
+
       const tbody = document.querySelector('#configs-table tbody');
       tbody.innerHTML = '';
       CONFIGS.forEach((cfg, i) => {
@@ -8059,6 +8108,19 @@ $TOOL_DEFS = [
           ownerBadge = `<span class="badge" style="background:#eee; color:#555;">${cfg.user_name || 'User ' + cfg.user_id}</span>`;
         }
 
+        // Actions Visibility
+        // Admin: All
+        // Tester: Only if Own
+        let actions = '';
+        if (isAdmin || cfg.user_id == curUid) {
+          actions = `
+             <button data-action="edit">Edit</button>
+             <button data-action="delete" class="text-danger">Delete</button>
+           `;
+        } else {
+          actions = `<span class="text-muted" style="font-size:11px;">Read-only</span>`;
+        }
+
         const tr = document.createElement('tr');
         tr.dataset.id = cfg.id;
         tr.innerHTML = `
@@ -8069,8 +8131,7 @@ $TOOL_DEFS = [
       <td>${cfg.is_enabled ? 'Yes' : 'No'}</td>
       <td class="text-muted" style="font-family:monospace; font-size:12px;">${snippet}</td>
       <td class="table-actions">
-        <button data-action="edit">Edit</button>
-        <button data-action="delete">Delete</button>
+        ${actions}
       </td>`;
         tbody.appendChild(tr);
       });
@@ -8086,10 +8147,20 @@ $TOOL_DEFS = [
         document.getElementById('cfg-name').value = cfg.config_name;
         document.getElementById('cfg-tool-code').value = cfg.tool_code;
         document.getElementById('cfg-enabled').checked = !!cfg.is_enabled;
+        let inputs = '';
         try {
           const json = JSON.parse(cfg.config_json || '{}');
-          document.getElementById('cfg-inputs').value = json.inputs || '';
+          inputs = json.inputs || '';
         } catch (e) { }
+        document.getElementById('cfg-inputs').value = inputs;
+
+        // Populate Owner if visible
+        const ownerSel = document.getElementById('cfg-owner');
+        if (ownerSel) {
+          // If user_id is null/undefined -> Global ("")
+          // Else -> user_id
+          ownerSel.value = cfg.user_id ? cfg.user_id : "";
+        }
       } else if (btn.dataset.action === 'delete') {
         if (!confirm('Delete configuration "' + cfg.config_name + '"?')) return;
         await api('delete-config', { id: cfg.id });
@@ -8109,32 +8180,56 @@ $TOOL_DEFS = [
         return;
       }
 
-      await api('save-config', {
-        id: id, tool_code: tool, config_name: name,
-        config: { inputs: inputs }, is_enabled: enabled ? 1 : 0
+      document.getElementById('cfg-save-btn').addEventListener('click', async () => {
+        const id = document.getElementById('cfg-id').value || null;
+        const name = document.getElementById('cfg-name').value.trim();
+        const tool = document.getElementById('cfg-tool-code').value;
+        const inputs = document.getElementById('cfg-inputs').value.trim();
+        const enabled = document.getElementById('cfg-enabled').checked;
+
+        if (!name || !tool) {
+          alert('Configuration name and tool are required.');
+          return;
+        }
+
+        const ownerSel = document.getElementById('cfg-owner');
+        let ownerId = undefined;
+        // If admin dropdown visible, capture selection
+        if (ownerSel && ownerSel.offsetParent !== null) {
+          ownerId = ownerSel.value === "" ? null : parseInt(ownerSel.value);
+        }
+
+        const payload = {
+          id: id, tool_code: tool, config_name: name,
+          config: { inputs: inputs }, is_enabled: enabled ? 1 : 0
+        };
+        if (ownerId !== undefined) {
+          payload.owner_id = ownerId;
+        }
+
+        await api('save-config', payload);
+
+        document.getElementById('config-form').reset();
+        document.getElementById('cfg-id').value = '';
+        document.getElementById('cfg-enabled').checked = true;
+        await loadConfigs();
       });
 
-      document.getElementById('config-form').reset();
-      document.getElementById('cfg-id').value = '';
-      document.getElementById('cfg-enabled').checked = true;
-      await loadConfigs();
-    });
+      document.getElementById('cfg-reset-btn').addEventListener('click', () => {
+        document.getElementById('config-form').reset();
+        document.getElementById('cfg-id').value = '';
+        document.getElementById('cfg-enabled').checked = true;
+      });
 
-    document.getElementById('cfg-reset-btn').addEventListener('click', () => {
-      document.getElementById('config-form').reset();
-      document.getElementById('cfg-id').value = '';
-      document.getElementById('cfg-enabled').checked = true;
-    });
-
-    /* Users */
-    async function loadUsers() {
-      USERS = await api('list-users');
-      const tbody = document.querySelector('#users-table tbody');
-      tbody.innerHTML = '';
-      USERS.forEach((u, i) => {
-        const tr = document.createElement('tr');
-        tr.dataset.id = u.id;
-        tr.innerHTML = `
+      /* Users */
+      async function loadUsers() {
+        USERS = await api('list-users');
+        const tbody = document.querySelector('#users-table tbody');
+        tbody.innerHTML = '';
+        USERS.forEach((u, i) => {
+          const tr = document.createElement('tr');
+          tr.dataset.id = u.id;
+          tr.innerHTML = `
       <td>${i + 1}</td>
       <td>${u.name}</td>
       <td>${u.email}</td>
@@ -8144,151 +8239,151 @@ $TOOL_DEFS = [
         <button data-action="edit">Edit</button>
         <button data-action="delete">Delete</button>
       </td>`;
-        tbody.appendChild(tr);
-      });
-    }
-
-    document.querySelector('#users-table').addEventListener('click', async (e) => {
-      const btn = e.target.closest('button'); if (!btn) return;
-      const tr = btn.closest('tr'); const id = parseInt(tr.dataset.id, 10);
-      const u = USERS.find(x => x.id == id); if (!u) return;
-
-      if (btn.dataset.action === 'edit') {
-        document.getElementById('user-id').value = u.id;
-        document.getElementById('user-name').value = u.name;
-        document.getElementById('user-email').value = u.email;
-        document.getElementById('user-role').value = u.role;
-        document.getElementById('user-active').checked = !!u.is_active;
-      } else if (btn.dataset.action === 'delete') {
-        if (!confirm('Delete user \"' + u.name + '\"?')) return;
-        await api('delete-user', { id: u.id });
-        await loadUsers();
-      }
-    });
-
-    document.getElementById('user-save-btn').addEventListener('click', async () => {
-      const id = document.getElementById('user-id').value || null;
-      const name = document.getElementById('user-name').value.trim();
-      const email = document.getElementById('user-email').value.trim();
-      const password = document.getElementById('user-password').value.trim();
-      const role = document.getElementById('user-role').value;
-      const active = document.getElementById('user-active').checked;
-
-      if (!name || !email) {
-        alert('Name and email are required.');
-        return;
+          tbody.appendChild(tr);
+        });
       }
 
-      await api('save-user', { id: id, name: name, email: email, password: password, role: role, is_active: active ? 1 : 0 });
+      document.querySelector('#users-table').addEventListener('click', async (e) => {
+        const btn = e.target.closest('button'); if (!btn) return;
+        const tr = btn.closest('tr'); const id = parseInt(tr.dataset.id, 10);
+        const u = USERS.find(x => x.id == id); if (!u) return;
 
-      document.getElementById('user-form').reset();
-      document.getElementById('user-id').value = '';
-      document.getElementById('user-active').checked = true;
-      await loadUsers();
-    });
-
-    document.getElementById('user-reset-btn').addEventListener('click', () => {
-      document.getElementById('user-form').reset();
-      document.getElementById('user-id').value = '';
-      document.getElementById('user-active').checked = true;
-    });
-
-    /* Stats */
-    async function loadStats(userId = null) {
-      try {
-        const payload = userId ? { user_id: userId } : {};
-        const s = await api('stats', payload);
-        document.getElementById('stat-total').textContent = s.total_runs;
-        document.getElementById('stat-passed').textContent = s.passed;
-        document.getElementById('stat-failed').textContent = s.failed;
-        document.getElementById('stat-open').textContent = s.open_issues;
-      } catch (e) {
-        console.error('Stats error:', e);
-      }
-    }
-    async function enforceRoleUI() {
-      if (typeof CURRENT_USER_ROLE === 'undefined') return;
-      const role = CURRENT_USER_ROLE.toLowerCase();
-
-      const tabConfigs = document.querySelector('button[data-tab="configs"]');
-      const tabUsers = document.querySelector('button[data-tab="users"]');
-      const tabSupport = document.querySelector('button[data-tab="support"]');
-      const suppAdmin = document.getElementById('support-admin-view');
-      const contactForm = document.getElementById('contact-support-form');
-      const myTickets = document.getElementById('my-support-tickets');
-
-      const userFilter = document.getElementById('filter-user-container');
-
-      // Default text
-      if (tabSupport) tabSupport.textContent = 'Support';
-
-      // User Filter Visibility
-      if (role === 'admin' || role === 'viewer') {
-        if (userFilter) userFilter.style.display = 'block';
-      } else {
-        if (userFilter) userFilter.style.display = 'none';
-      }
-
-      if (role === 'viewer') {
-        if (tabConfigs) tabConfigs.style.display = 'none';
-        if (tabUsers) tabUsers.style.display = 'none';
-      } else if (role === 'tester') {
-        if (tabUsers) tabUsers.style.display = 'none';
-      }
-
-      if (role === 'admin') {
-        if (contactForm) contactForm.style.display = 'none';
-        if (myTickets) myTickets.style.display = 'none'; // Admin doesn't need personal history here
-        if (suppAdmin) {
-          suppAdmin.style.display = 'block';
-          loadSupport();
+        if (btn.dataset.action === 'edit') {
+          document.getElementById('user-id').value = u.id;
+          document.getElementById('user-name').value = u.name;
+          document.getElementById('user-email').value = u.email;
+          document.getElementById('user-role').value = u.role;
+          document.getElementById('user-active').checked = !!u.is_active;
+        } else if (btn.dataset.action === 'delete') {
+          if (!confirm('Delete user \"' + u.name + '\"?')) return;
+          await api('delete-user', { id: u.id });
+          await loadUsers();
         }
-        if (tabSupport) {
-          tabSupport.textContent = 'Support Center';
-          const c = await api('get-unread-support');
-          if (c && c.count > 0) {
-            tabSupport.innerHTML += ` <span style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:11px;">${c.count}</span>`;
+      });
+
+      document.getElementById('user-save-btn').addEventListener('click', async () => {
+        const id = document.getElementById('user-id').value || null;
+        const name = document.getElementById('user-name').value.trim();
+        const email = document.getElementById('user-email').value.trim();
+        const password = document.getElementById('user-password').value.trim();
+        const role = document.getElementById('user-role').value;
+        const active = document.getElementById('user-active').checked;
+
+        if (!name || !email) {
+          alert('Name and email are required.');
+          return;
+        }
+
+        await api('save-user', { id: id, name: name, email: email, password: password, role: role, is_active: active ? 1 : 0 });
+
+        document.getElementById('user-form').reset();
+        document.getElementById('user-id').value = '';
+        document.getElementById('user-active').checked = true;
+        await loadUsers();
+      });
+
+      document.getElementById('user-reset-btn').addEventListener('click', () => {
+        document.getElementById('user-form').reset();
+        document.getElementById('user-id').value = '';
+        document.getElementById('user-active').checked = true;
+      });
+
+      /* Stats */
+      async function loadStats(userId = null) {
+        try {
+          const payload = userId ? { user_id: userId } : {};
+          const s = await api('stats', payload);
+          document.getElementById('stat-total').textContent = s.total_runs;
+          document.getElementById('stat-passed').textContent = s.passed;
+          document.getElementById('stat-failed').textContent = s.failed;
+          document.getElementById('stat-open').textContent = s.open_issues;
+        } catch (e) {
+          console.error('Stats error:', e);
+        }
+      }
+      async function enforceRoleUI() {
+        if (typeof CURRENT_USER_ROLE === 'undefined') return;
+        const role = CURRENT_USER_ROLE.toLowerCase();
+
+        const tabConfigs = document.querySelector('button[data-tab="configs"]');
+        const tabUsers = document.querySelector('button[data-tab="users"]');
+        const tabSupport = document.querySelector('button[data-tab="support"]');
+        const suppAdmin = document.getElementById('support-admin-view');
+        const contactForm = document.getElementById('contact-support-form');
+        const myTickets = document.getElementById('my-support-tickets');
+
+        const userFilter = document.getElementById('filter-user-container');
+
+        // Default text
+        if (tabSupport) tabSupport.textContent = 'Support';
+
+        // User Filter Visibility
+        if (role === 'admin' || role === 'viewer') {
+          if (userFilter) userFilter.style.display = 'block';
+        } else {
+          if (userFilter) userFilter.style.display = 'none';
+        }
+
+        if (role === 'viewer') {
+          if (tabConfigs) tabConfigs.style.display = 'none';
+          if (tabUsers) tabUsers.style.display = 'none';
+        } else if (role === 'tester') {
+          if (tabUsers) tabUsers.style.display = 'none';
+        }
+
+        if (role === 'admin') {
+          if (contactForm) contactForm.style.display = 'none';
+          if (myTickets) myTickets.style.display = 'none'; // Admin doesn't need personal history here
+          if (suppAdmin) {
+            suppAdmin.style.display = 'block';
+            loadSupport();
+          }
+          if (tabSupport) {
+            tabSupport.textContent = 'Support Center';
+            const c = await api('get-unread-support');
+            if (c && c.count > 0) {
+              tabSupport.innerHTML += ` <span style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:11px;">${c.count}</span>`;
+            }
+          }
+        } else {
+          // Non-admin (User)
+          if (myTickets) {
+            myTickets.style.display = 'block';
+            loadMySupport();
           }
         }
-      } else {
-        // Non-admin (User)
-        if (myTickets) {
-          myTickets.style.display = 'block';
-          loadMySupport();
+      }
+      enforceRoleUI();
+
+      /* Support Logic */
+      document.getElementById('btn-send-support').addEventListener('click', async () => {
+        const subject = document.getElementById('supp-subject').value;
+        const message = document.getElementById('supp-message').value;
+        const res = await api('save-support', { subject, message });
+        if (res.ok) {
+          alert('Message sent to support!');
+          document.getElementById('supp-subject').value = '';
+          document.getElementById('supp-message').value = '';
+          loadMySupport(); // Refresh list
+        } else {
+          alert('Error sending message');
         }
-      }
-    }
-    enforceRoleUI();
+      });
 
-    /* Support Logic */
-    document.getElementById('btn-send-support').addEventListener('click', async () => {
-      const subject = document.getElementById('supp-subject').value;
-      const message = document.getElementById('supp-message').value;
-      const res = await api('save-support', { subject, message });
-      if (res.ok) {
-        alert('Message sent to support!');
-        document.getElementById('supp-subject').value = '';
-        document.getElementById('supp-message').value = '';
-        loadMySupport(); // Refresh list
-      } else {
-        alert('Error sending message');
-      }
-    });
-
-    async function loadSupport() {
-      const list = document.getElementById('support-list');
-      if (!list) return;
-      const msgs = await api('list-support');
-      list.innerText = '';
-      if (msgs.length === 0) {
-        list.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#888;">No messages found.</td></tr>';
-        return;
-      }
-      list.innerHTML = msgs.map(m => {
-        const isUnread = m.is_read == 0;
-        const style = isUnread ? 'font-weight:bold; background:#f0f8ff;' : '';
-        const replyStatus = m.admin_reply ? '<span style="color:green; font-weight:bold;">Replied</span>' : '<span style="color:orange;">Pending</span>';
-        return `
+      async function loadSupport() {
+        const list = document.getElementById('support-list');
+        if (!list) return;
+        const msgs = await api('list-support');
+        list.innerText = '';
+        if (msgs.length === 0) {
+          list.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#888;">No messages found.</td></tr>';
+          return;
+        }
+        list.innerHTML = msgs.map(m => {
+          const isUnread = m.is_read == 0;
+          const style = isUnread ? 'font-weight:bold; background:#f0f8ff;' : '';
+          const replyStatus = m.admin_reply ? '<span style="color:green; font-weight:bold;">Replied</span>' : '<span style="color:orange;">Pending</span>';
+          return `
             <tr style="${style} cursor:pointer;" onclick="toggleReplyRow(${m.id}, this)">
                 <td>${m.created_at}</td>
                 <td><strong>${m.user_name}</strong><br><small style="color:#888;">${m.user_email}</small></td>
@@ -8300,52 +8395,52 @@ $TOOL_DEFS = [
                     <p><strong>Message:</strong> ${m.message}</p>
                     <hr style="margin:10px 0; border:0; border-top:1px solid #ddd;">
                     ${m.admin_reply ?
-            `<div style="background:#e8f5e9; padding:10px; border-radius:4px; margin-bottom:10px;">
+              `<div style="background:#e8f5e9; padding:10px; border-radius:4px; margin-bottom:10px;">
                             <strong>Admin Reply (${m.reply_at}):</strong><br>${m.admin_reply}
                          </div>` :
-            `<div style="margin-bottom:10px;">
+              `<div style="margin-bottom:10px;">
                             <textarea id="reply-text-${m.id}" style="width:100%; height:80px; padding:8px;" placeholder="Type reply..."></textarea>
                             <button onclick="sendReply(${m.id})" class="btn-primary" style="margin-top:5px; padding:4px 10px; font-size:12px;">Send Reply</button>
                          </div>`
-          }
+            }
                 </td>
             </tr>
         `}).join('');
-    }
-
-    function toggleReplyRow(id, row) {
-      // Mark read if bold
-      if (row.style.fontWeight.includes('bold') || row.style.fontWeight === 'bold') {
-        api('mark-support-read', { id });
-        row.style.fontWeight = 'normal';
-        row.style.background = 'transparent';
       }
-      const r = document.getElementById(`reply-row-${id}`);
-      r.style.display = r.style.display === 'none' ? 'table-row' : 'none';
-    }
 
-    async function sendReply(id) {
-      const txt = document.getElementById(`reply-text-${id}`).value;
-      if (!txt) return alert('Enter reply');
-      const res = await api('reply-support', { id, reply: txt });
-      if (res.ok) {
-        alert('Replied!');
-        loadSupport();
-      } else {
-        alert('Error replying');
+      function toggleReplyRow(id, row) {
+        // Mark read if bold
+        if (row.style.fontWeight.includes('bold') || row.style.fontWeight === 'bold') {
+          api('mark-support-read', { id });
+          row.style.fontWeight = 'normal';
+          row.style.background = 'transparent';
+        }
+        const r = document.getElementById(`reply-row-${id}`);
+        r.style.display = r.style.display === 'none' ? 'table-row' : 'none';
       }
-    }
 
-    async function loadMySupport() {
-      const list = document.getElementById('my-support-list');
-      if (!list) return; // Might not exist yet in HTML
-      const msgs = await api('my-support-history');
-      list.innerHTML = '';
-      if (msgs.length === 0) {
-        list.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">No tickets yet.</div>';
-        return;
+      async function sendReply(id) {
+        const txt = document.getElementById(`reply-text-${id}`).value;
+        if (!txt) return alert('Enter reply');
+        const res = await api('reply-support', { id, reply: txt });
+        if (res.ok) {
+          alert('Replied!');
+          loadSupport();
+        } else {
+          alert('Error replying');
+        }
       }
-      list.innerHTML = msgs.map(m => `
+
+      async function loadMySupport() {
+        const list = document.getElementById('my-support-list');
+        if (!list) return; // Might not exist yet in HTML
+        const msgs = await api('my-support-history');
+        list.innerHTML = '';
+        if (msgs.length === 0) {
+          list.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">No tickets yet.</div>';
+          return;
+        }
+        list.innerHTML = msgs.map(m => `
             <div style="border:1px solid #eee; padding:10px; margin-bottom:10px; border-radius:4px; background:white;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                    <strong>${m.subject}</strong>
@@ -8353,82 +8448,82 @@ $TOOL_DEFS = [
                 </div>
                 <div style="margin-bottom:5px; color:#555;">${m.message}</div>
                 ${m.admin_reply ?
-          `<div style="background:#f1f8e9; padding:8px; border-radius:4px; margin-top:5px; font-size:13px; border-left:3px solid #4caf50;">
+            `<div style="background:#f1f8e9; padding:8px; border-radius:4px; margin-top:5px; font-size:13px; border-left:3px solid #4caf50;">
                         <strong>Admin Reply:</strong> ${m.admin_reply}
                      </div>`
-          : '<div style="font-size:12px; color:orange; margin-top:5px;">Awaiting Reply...</div>'
-        }
+            : '<div style="font-size:12px; color:orange; margin-top:5px;">Awaiting Reply...</div>'
+          }
             </div>
         `).join('');
-    }
-    /* Profile Logic */
-    const profileModal = document.getElementById('profile-modal');
-    const profileDropdown = document.getElementById('profile-dropdown');
-
-    // Toggle Dropdown
-    document.getElementById('profile-trigger').addEventListener('click', (e) => {
-      // Only toggle if not clicking inside the dropdown
-      if (e.target.closest('.profile-dropdown')) return;
-      profileDropdown.classList.toggle('active');
-      e.stopPropagation();
-    });
-
-    // Close Dropdown when clicking outside
-    document.addEventListener('click', () => {
-      profileDropdown.classList.remove('active');
-    });
-
-    // Edit Profile Click
-    document.getElementById('menu-edit-profile').addEventListener('click', async (e) => {
-      e.stopPropagation(); // Prevent bubbling to header toggle
-      profileDropdown.classList.remove('active'); // Close menu
-
-      const u = await api('get-profile');
-      if (u && u.id) {
-        document.getElementById('prof-name').value = u.name;
-        document.getElementById('prof-avatar').value = u.avatar_url || '';
-        document.getElementById('profile-preview').src = u.avatar_url || `https://ui-avatars.com/api/?name=${u.name}`;
-        profileModal.classList.add('active'); // Open Modal
       }
-    });
+      /* Profile Logic */
+      const profileModal = document.getElementById('profile-modal');
+      const profileDropdown = document.getElementById('profile-dropdown');
 
-    function closeProfileModal() {
-      profileModal.classList.remove('active');
-    }
+      // Toggle Dropdown
+      document.getElementById('profile-trigger').addEventListener('click', (e) => {
+        // Only toggle if not clicking inside the dropdown
+        if (e.target.closest('.profile-dropdown')) return;
+        profileDropdown.classList.toggle('active');
+        e.stopPropagation();
+      });
 
-    document.getElementById('save-profile-btn').addEventListener('click', async () => {
-      const name = document.getElementById('prof-name').value;
-      let avatar = document.getElementById('prof-avatar').value;
-      const pass = document.getElementById('prof-password').value;
-      const fileInput = document.getElementById('prof-file');
+      // Close Dropdown when clicking outside
+      document.addEventListener('click', () => {
+        profileDropdown.classList.remove('active');
+      });
 
-      // Handle File Upload
-      if (fileInput.files.length > 0) {
-        const fd = new FormData();
-        fd.append('avatar', fileInput.files[0]);
-        try {
-          const upRes = await fetch('?api=upload-avatar', { method: 'POST', body: fd });
-          const upJson = await upRes.json();
-          if (upJson.ok) {
-            avatar = upJson.url;
-          } else {
-            alert('Upload failed: ' + upJson.error); return;
-          }
-        } catch (e) { alert('Upload failed'); return; }
+      // Edit Profile Click
+      document.getElementById('menu-edit-profile').addEventListener('click', async (e) => {
+        e.stopPropagation(); // Prevent bubbling to header toggle
+        profileDropdown.classList.remove('active'); // Close menu
+
+        const u = await api('get-profile');
+        if (u && u.id) {
+          document.getElementById('prof-name').value = u.name;
+          document.getElementById('prof-avatar').value = u.avatar_url || '';
+          document.getElementById('profile-preview').src = u.avatar_url || `https://ui-avatars.com/api/?name=${u.name}`;
+          profileModal.classList.add('active'); // Open Modal
+        }
+      });
+
+      function closeProfileModal() {
+        profileModal.classList.remove('active');
       }
 
-      const res = await api('update-profile', { name, avatar_url: avatar, password: pass });
-      if (res.ok) {
-        alert('Profile updated!');
-        location.reload();
-      } else {
-        alert('Error: ' + (res.error || 'Unknown'));
-      }
-    });
+      document.getElementById('save-profile-btn').addEventListener('click', async () => {
+        const name = document.getElementById('prof-name').value;
+        let avatar = document.getElementById('prof-avatar').value;
+        const pass = document.getElementById('prof-password').value;
+        const fileInput = document.getElementById('prof-file');
 
-    /* Initial */
-    Promise.all([loadConfigs(), loadUsers(), loadRuns(), loadStats()])
-      .catch(console.error);
+        // Handle File Upload
+        if (fileInput.files.length > 0) {
+          const fd = new FormData();
+          fd.append('avatar', fileInput.files[0]);
+          try {
+            const upRes = await fetch('?api=upload-avatar', { method: 'POST', body: fd });
+            const upJson = await upRes.json();
+            if (upJson.ok) {
+              avatar = upJson.url;
+            } else {
+              alert('Upload failed: ' + upJson.error); return;
+            }
+          } catch (e) { alert('Upload failed'); return; }
+        }
+
+        const res = await api('update-profile', { name, avatar_url: avatar, password: pass });
+        if (res.ok) {
+          alert('Profile updated!');
+          location.reload();
+        } else {
+          alert('Error: ' + (res.error || 'Unknown'));
+        }
+      });
+
+      /* Initial */
+      Promise.all([loadConfigs(), loadUsers(), loadRuns(), loadStats()])
+        .catch(console.error);
   </script>
 </body>
 
