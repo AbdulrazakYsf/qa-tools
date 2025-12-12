@@ -7083,175 +7083,172 @@ $TOOL_DEFS = [
 
   <!-- RUN SUMMARY MODAL -->
   <div class="modal-overlay" id="run-summary-modal">
-    <div class="modal-card" style="max-width:500px; max-height:400px; height:auto;">
-      <div id="run-summary-modal" class="modal-overlay">
-        <div class="modal">
-          <div class="modal-header">
-            <h2 id="summary-title" style="margin:0;">Run Complete</h2>
-            <button class="btn-ghost" onclick="closeSummaryModal()"
-              style="font-size:20px; padding:0 10px;">&times;</button>
+    <div class="modal-card" style="max-width:500px; max-height:auto;">
+      <div class="modal-header">
+        <h2 id="summary-title" style="margin:0;">Run Complete</h2>
+        <button class="btn-ghost" onclick="closeSummaryModal()" style="font-size:20px; padding:0 10px;">&times;</button>
+      </div>
+      <div class="modal-body" style="text-align:center; padding:20px;">
+        <div id="summary-icon" style="font-size:48px; margin-bottom:10px;"></div>
+        <div class="stat-grid" style="justify-content:center; gap:20px;">
+          <div class="stat-card">
+            <div class="stat-value" id="sum-total">0</div>
+            <div class="stat-label">Total</div>
           </div>
-          <div class="modal-body" style="text-align:center; padding:20px;">
-            <div id="summary-icon" style="font-size:48px; margin-bottom:10px;"></div>
-            <div class="stat-grid" style="justify-content:center; gap:20px;">
-              <div class="stat-card">
-                <div class="stat-value" id="sum-total">0</div>
-                <div class="stat-label">Total</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-value" id="sum-passed" style="color:green">0</div>
-                <div class="stat-label">Passed</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-value" id="sum-failed" style="color:red">0</div>
-                <div class="stat-label">Failed</div>
-              </div>
-              <div class="stat-card">
-                <div class="stat-value" id="sum-open" style="color:orange">0</div>
-                <div class="stat-label">Open</div>
-              </div>
-            </div>
-            <div style="margin-top:20px;">
-              <button class="btn-primary" onclick="closeSummaryModal()">Close</button>
-            </div>
+          <div class="stat-card">
+            <div class="stat-value" id="sum-passed" style="color:green">0</div>
+            <div class="stat-label">Passed</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="sum-failed" style="color:red">0</div>
+            <div class="stat-label">Failed</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="sum-open" style="color:orange">0</div>
+            <div class="stat-label">Open</div>
           </div>
         </div>
+        <div style="margin-top:20px;">
+          <button class="btn-primary" onclick="closeSummaryModal()">Close</button>
+        </div>
       </div>
+    </div>
+  </div>
 
-      <script>
-        const TOOL_DEFS = <?php echo json_encode($TOOL_DEFS, JSON_UNESCAPED_UNICODE); ?>;
-        const TOOL_HTML = <?php echo json_encode($TOOLS_HTML, JSON_UNESCAPED_UNICODE); ?>;
+  <script>
+    const TOOL_DEFS = <?php echo json_encode($TOOL_DEFS, JSON_UNESCAPED_UNICODE); ?>;
+    const TOOL_HTML = <?php echo json_encode($TOOLS_HTML, JSON_UNESCAPED_UNICODE); ?>;
 
-        let ACTIVE_TOOL = null;
-        let CONFIGS = [];
-        let USERS = [];
-        let RUNS = [];
+    let ACTIVE_TOOL = null;
+    let CONFIGS = [];
+    let USERS = [];
+    let RUNS = [];
 
-        let chartPassFail = null;
-        let chartRunStatus = null;
-        let chartPassTrend = null;
+    let chartPassFail = null;
+    let chartRunStatus = null;
+    let chartPassTrend = null;
 
-        function computeRunAggregates() {
-          const agg = {
-            totalTests: 0,
-            passed: 0,
-            failed: 0,
-            open: 0,
-            statusCounts: {}
-          };
-          RUNS.forEach(r => {
-            const total = Number(r.total_tests || 0);
-            const passed = Number(r.passed || 0);
-            const failed = Number(r.failed || 0);
-            const open = Number(r.open_issues || 0);
-            agg.totalTests += total;
-            agg.passed += passed;
-            agg.failed += failed;
-            agg.open += open;
-            const key = ((r.status || 'unknown') + '').toLowerCase();
-            agg.statusCounts[key] = (agg.statusCounts[key] || 0) + 1;
-          });
-          return agg;
-        }
+    function computeRunAggregates() {
+      const agg = {
+        totalTests: 0,
+        passed: 0,
+        failed: 0,
+        open: 0,
+        statusCounts: {}
+      };
+      RUNS.forEach(r => {
+        const total = Number(r.total_tests || 0);
+        const passed = Number(r.passed || 0);
+        const failed = Number(r.failed || 0);
+        const open = Number(r.open_issues || 0);
+        agg.totalTests += total;
+        agg.passed += passed;
+        agg.failed += failed;
+        agg.open += open;
+        const key = ((r.status || 'unknown') + '').toLowerCase();
+        agg.statusCounts[key] = (agg.statusCounts[key] || 0) + 1;
+      });
+      return agg;
+    }
 
-        function updateChartsFromRuns() {
-          if (typeof Chart === 'undefined') return;
-          const agg = computeRunAggregates();
+    function updateChartsFromRuns() {
+      if (typeof Chart === 'undefined') return;
+      const agg = computeRunAggregates();
 
-          const passFailCanvas = document.getElementById('chart-pass-fail');
-          if (passFailCanvas) {
-            const totalForPie = agg.passed + agg.failed + agg.open;
-            const data = totalForPie > 0 ? [agg.passed, agg.failed, agg.open] : [0, 0, 0];
-            if (chartPassFail) chartPassFail.destroy();
-            chartPassFail = new Chart(passFailCanvas.getContext('2d'), {
-              type: 'doughnut',
-              data: {
-                labels: ['Passed tests', 'Failed tests', 'Open issues'],
-                datasets: [{ data }]
-              },
-              options: {
-                plugins: { legend: { display: true, position: 'bottom' } },
-                maintainAspectRatio: false
-              }
-            });
+      const passFailCanvas = document.getElementById('chart-pass-fail');
+      if (passFailCanvas) {
+        const totalForPie = agg.passed + agg.failed + agg.open;
+        const data = totalForPie > 0 ? [agg.passed, agg.failed, agg.open] : [0, 0, 0];
+        if (chartPassFail) chartPassFail.destroy();
+        chartPassFail = new Chart(passFailCanvas.getContext('2d'), {
+          type: 'doughnut',
+          data: {
+            labels: ['Passed tests', 'Failed tests', 'Open issues'],
+            datasets: [{ data }]
+          },
+          options: {
+            plugins: { legend: { display: true, position: 'bottom' } },
+            maintainAspectRatio: false
           }
-
-          const statusCanvas = document.getElementById('chart-run-status');
-          if (statusCanvas) {
-            const labels = Object.keys(agg.statusCounts);
-            const values = labels.map(k => agg.statusCounts[k]);
-            if (chartRunStatus) chartRunStatus.destroy();
-            chartRunStatus = new Chart(statusCanvas.getContext('2d'), {
-              type: 'pie',
-              data: {
-                labels,
-                datasets: [{ data: values.length ? values : [0] }]
-              },
-              options: {
-                plugins: { legend: { display: true, position: 'bottom' } },
-                maintainAspectRatio: false
-              }
-            });
-          }
-
-          const trendCanvas = document.getElementById('chart-pass-trend');
-          if (trendCanvas) {
-            const sorted = RUNS.slice().sort((a, b) => {
-              const da = (a.run_date || '').toString();
-              const db = (b.run_date || '').toString();
-              return da.localeCompare(db);
-            });
-            const recent = sorted.slice(-10);
-            const labels = recent.map(r => r.run_date);
-            const values = recent.map(r => {
-              const total = Number(r.total_tests || 0);
-              const passed = Number(r.passed || 0);
-              if (!total) return 0;
-              return Math.round((passed / total) * 100);
-            });
-            if (chartPassTrend) chartPassTrend.destroy();
-            chartPassTrend = new Chart(trendCanvas.getContext('2d'), {
-              type: 'line',
-              data: {
-                labels,
-                datasets: [{ label: 'Pass rate %', data: values, tension: 0.2 }]
-              },
-              options: {
-                scales: { y: { beginAtZero: true, max: 100 } },
-                plugins: { legend: { display: false } },
-                maintainAspectRatio: false
-              }
-            });
-          }
-        }
-
-        async function api(action, payload) {
-          const res = await fetch('?api=' + encodeURIComponent(action), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload || {})
-          });
-          if (!res.ok) throw new Error('API ' + action + ' failed');
-          return res.json();
-        }
-
-        /* Tabs */
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            btn.classList.add('active');
-            document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-          });
         });
+      }
 
-        /* Modules grid */
-        const modulesGrid = document.getElementById('modules-grid');
-        TOOL_DEFS.forEach((t) => {
-          const div = document.createElement('div');
-          div.className = 'module-tile';
-          div.dataset.code = t.code;
-          div.innerHTML = `
+      const statusCanvas = document.getElementById('chart-run-status');
+      if (statusCanvas) {
+        const labels = Object.keys(agg.statusCounts);
+        const values = labels.map(k => agg.statusCounts[k]);
+        if (chartRunStatus) chartRunStatus.destroy();
+        chartRunStatus = new Chart(statusCanvas.getContext('2d'), {
+          type: 'pie',
+          data: {
+            labels,
+            datasets: [{ data: values.length ? values : [0] }]
+          },
+          options: {
+            plugins: { legend: { display: true, position: 'bottom' } },
+            maintainAspectRatio: false
+          }
+        });
+      }
+
+      const trendCanvas = document.getElementById('chart-pass-trend');
+      if (trendCanvas) {
+        const sorted = RUNS.slice().sort((a, b) => {
+          const da = (a.run_date || '').toString();
+          const db = (b.run_date || '').toString();
+          return da.localeCompare(db);
+        });
+        const recent = sorted.slice(-10);
+        const labels = recent.map(r => r.run_date);
+        const values = recent.map(r => {
+          const total = Number(r.total_tests || 0);
+          const passed = Number(r.passed || 0);
+          if (!total) return 0;
+          return Math.round((passed / total) * 100);
+        });
+        if (chartPassTrend) chartPassTrend.destroy();
+        chartPassTrend = new Chart(trendCanvas.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{ label: 'Pass rate %', data: values, tension: 0.2 }]
+          },
+          options: {
+            scales: { y: { beginAtZero: true, max: 100 } },
+            plugins: { legend: { display: false } },
+            maintainAspectRatio: false
+          }
+        });
+      }
+    }
+
+    async function api(action, payload) {
+      const res = await fetch('?api=' + encodeURIComponent(action), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {})
+      });
+      if (!res.ok) throw new Error('API ' + action + ' failed');
+      return res.json();
+    }
+
+    /* Tabs */
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    /* Modules grid */
+    const modulesGrid = document.getElementById('modules-grid');
+    TOOL_DEFS.forEach((t) => {
+      const div = document.createElement('div');
+      div.className = 'module-tile';
+      div.dataset.code = t.code;
+      div.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
       <div>
         <div class="module-title">${t.name}</div>
@@ -7262,404 +7259,404 @@ $TOOL_DEFS = [
         <span>Run</span>
       </label>
     </div>`;
-          div.addEventListener('click', (ev) => {
-            if (ev.target.closest('input[type="checkbox"]')) return;
-            selectModule(t.code);
-          });
-          modulesGrid.appendChild(div);
-        });
+      div.addEventListener('click', (ev) => {
+        if (ev.target.closest('input[type="checkbox"]')) return;
+        selectModule(t.code);
+      });
+      modulesGrid.appendChild(div);
+    });
 
-        const iframe = document.getElementById('tool-iframe');
+    const iframe = document.getElementById('tool-iframe');
 
 
-        function parseConfigObject(cfg) {
-          if (!cfg || !cfg.config_json) return {};
+    function parseConfigObject(cfg) {
+      if (!cfg || !cfg.config_json) return {};
+      try {
+        const obj = JSON.parse(cfg.config_json || '{}');
+        return obj && typeof obj === 'object' ? obj : {};
+      } catch (e) {
+        console.error('Invalid config_json for', cfg.tool_code, e);
+        return {};
+      }
+    }
+
+    function applyConfigToTool(doc, code, cfgObj) {
+      const inputs = (cfgObj.inputs || '').toString();
+
+      switch (code) {
+        case 'brand':
+        case 'category':
+        case 'cms':
+        case 'sku': {
+          const el = doc.getElementById('urlInput');
+          if (el) el.value = inputs;
+          break;
+        }
+        case 'stock':
+        case 'getcategories':
+        case 'images':
+        case 'products':
+        case 'sub_category':
+        case 'category_filter': {
+          const ta = doc.getElementById('urls');
+          if (ta) ta.value = inputs;
+          break;
+        }
+        case 'price_checker': {
+          const ta = doc.getElementById('cmsInput');
+          if (ta) ta.value = inputs;
+          break;
+        }
+        case 'login': {
+          const ta = doc.getElementById('bulk');
+          if (ta) ta.value = inputs;
+          break;
+        }
+        case 'add_to_cart': {
+          const skuTa = doc.getElementById('skus');
+          if (skuTa) skuTa.value = inputs;
+          if (cfgObj.qty && doc.getElementById('qty')) {
+            doc.getElementById('qty').value = cfgObj.qty;
+          }
+          break;
+        }
+        default: {
+          const ta = doc.querySelector('textarea');
+          if (ta) ta.value = inputs;
+          break;
+        }
+      }
+    }
+
+    async function runToolWithConfig(code, cfg) {
+      return new Promise((resolve) => {
+        const cfgObj = parseConfigObject(cfg);
+
+        function onLoad() {
+          iframe.removeEventListener('load', onLoad);
+
           try {
-            const obj = JSON.parse(cfg.config_json || '{}');
-            return obj && typeof obj === 'object' ? obj : {};
-          } catch (e) {
-            console.error('Invalid config_json for', cfg.tool_code, e);
-            return {};
-          }
-        }
+            const w = iframe.contentWindow;
+            const doc = iframe.contentDocument || w.document;
 
-        function applyConfigToTool(doc, code, cfgObj) {
-          const inputs = (cfgObj.inputs || '').toString();
+            applyConfigToTool(doc, code, cfgObj);
 
-          switch (code) {
-            case 'brand':
-            case 'category':
-            case 'cms':
-            case 'sku': {
-              const el = doc.getElementById('urlInput');
-              if (el) el.value = inputs;
-              break;
-            }
-            case 'stock':
-            case 'getcategories':
-            case 'images':
-            case 'products':
-            case 'sub_category':
-            case 'category_filter': {
-              const ta = doc.getElementById('urls');
-              if (ta) ta.value = inputs;
-              break;
-            }
-            case 'price_checker': {
-              const ta = doc.getElementById('cmsInput');
-              if (ta) ta.value = inputs;
-              break;
-            }
-            case 'login': {
-              const ta = doc.getElementById('bulk');
-              if (ta) ta.value = inputs;
-              break;
-            }
-            case 'add_to_cart': {
-              const skuTa = doc.getElementById('skus');
-              if (skuTa) skuTa.value = inputs;
-              if (cfgObj.qty && doc.getElementById('qty')) {
-                doc.getElementById('qty').value = cfgObj.qty;
+            let runFn = w.run || w.Run || w.start || w.execute;
+            if (!runFn) {
+              if (code === 'cms' && typeof w.startCrawling === 'function') {
+                runFn = w.startCrawling;
               }
-              break;
             }
-            default: {
-              const ta = doc.querySelector('textarea');
-              if (ta) ta.value = inputs;
-              break;
+            if (typeof runFn !== 'function') {
+              console.warn('No runnable function for tool', code);
+              resolve({ tests: 0, passed: 0, failed: 1, open: 1, rows: [] });
+              return;
             }
-          }
-        }
 
-        async function runToolWithConfig(code, cfg) {
-          return new Promise((resolve) => {
-            const cfgObj = parseConfigObject(cfg);
+            let finished = false;
 
-            function onLoad() {
-              iframe.removeEventListener('load', onLoad);
+            function collectResults() {
+              if (finished) return;
+              finished = true;
 
-              try {
-                const w = iframe.contentWindow;
-                const doc = iframe.contentDocument || w.document;
+              let tests = 0, passed = 0, failed = 0, open = 0;
+              const rowsOut = [];
 
-                applyConfigToTool(doc, code, cfgObj);
-
-                let runFn = w.run || w.Run || w.start || w.execute;
-                if (!runFn) {
-                  if (code === 'cms' && typeof w.startCrawling === 'function') {
-                    runFn = w.startCrawling;
-                  }
-                }
-                if (typeof runFn !== 'function') {
-                  console.warn('No runnable function for tool', code);
-                  resolve({ tests: 0, passed: 0, failed: 1, open: 1, rows: [] });
-                  return;
-                }
-
-                let finished = false;
-
-                function collectResults() {
-                  if (finished) return;
-                  finished = true;
-
-                  let tests = 0, passed = 0, failed = 0, open = 0;
-                  const rowsOut = [];
-
-                  if (Array.isArray(w.rows)) {
-                    w.rows.forEach(r => {
-                      if (!r) return;
-                      const status = (r.status || '').toString();
-                      const url = r.link || r.url || r.href || r.cms || r.endpoint || '';
-                      const parent = r.parent || r.source || r.origin || '';
-                      const row = { status, url, parent };
-                      try {
-                        row.payload = JSON.stringify(r);
-                      } catch (e) {
-                        row.payload = null;
-                      }
-                      rowsOut.push(row);
-
-                      const s = status.toUpperCase();
-                      if (!s) return;
-                      tests++;
-                      if (s === 'OK' || s === 'VALID' || s === 'SUCCESS' || s === 'IN STOCK') passed++;
-                      else { failed++; open++; }
-                    });
-                  } else {
-                    const els = doc.querySelectorAll('[data-status]');
-                    els.forEach(el => {
-                      const status = (el.getAttribute('data-status') || '').toString();
-                      const s = status.toUpperCase();
-                      let url = el.getAttribute('data-url') || '';
-                      if (!url) {
-                        const a = el.querySelector('a');
-                        if (a && a.href) url = a.href;
-                      }
-                      const parent = el.getAttribute('data-parent') || '';
-                      const row = { status, url, parent, payload: null };
-                      rowsOut.push(row);
-
-                      if (!s) return;
-                      tests++;
-                      if (s === 'OK' || s === 'VALID' || s === 'SUCCESS' || s === 'IN STOCK') passed++;
-                      else { failed++; open++; }
-                    });
-                  }
-
-                  resolve({ tests, passed, failed, open, rows: rowsOut });
-                }
-
-                (async () => {
+              if (Array.isArray(w.rows)) {
+                w.rows.forEach(r => {
+                  if (!r) return;
+                  const status = (r.status || '').toString();
+                  const url = r.link || r.url || r.href || r.cms || r.endpoint || '';
+                  const parent = r.parent || r.source || r.origin || '';
+                  const row = { status, url, parent };
                   try {
-                    const res = runFn();
-                    if (res && typeof res.then === 'function') {
-                      await res;
-                    }
-
-                    const loadingEl = doc.getElementById('loading');
-                    if (loadingEl) {
-                      const checkDone = () => {
-                        const style = getComputedStyle(loadingEl);
-                        if (style.display === 'none' || style.display === '') {
-                          setTimeout(collectResults, 300);
-                        } else {
-                          setTimeout(checkDone, 400);
-                        }
-                      };
-                      checkDone();
-                    } else {
-                      setTimeout(collectResults, 2000);
-                    }
+                    row.payload = JSON.stringify(r);
                   } catch (e) {
-                    console.error(e);
-                    resolve({ tests: 0, passed: 0, failed: 1, open: 1, rows: [] });
+                    row.payload = null;
                   }
-                })();
+                  rowsOut.push(row);
+
+                  const s = status.toUpperCase();
+                  if (!s) return;
+                  tests++;
+                  if (s === 'OK' || s === 'VALID' || s === 'SUCCESS' || s === 'IN STOCK') passed++;
+                  else { failed++; open++; }
+                });
+              } else {
+                const els = doc.querySelectorAll('[data-status]');
+                els.forEach(el => {
+                  const status = (el.getAttribute('data-status') || '').toString();
+                  const s = status.toUpperCase();
+                  let url = el.getAttribute('data-url') || '';
+                  if (!url) {
+                    const a = el.querySelector('a');
+                    if (a && a.href) url = a.href;
+                  }
+                  const parent = el.getAttribute('data-parent') || '';
+                  const row = { status, url, parent, payload: null };
+                  rowsOut.push(row);
+
+                  if (!s) return;
+                  tests++;
+                  if (s === 'OK' || s === 'VALID' || s === 'SUCCESS' || s === 'IN STOCK') passed++;
+                  else { failed++; open++; }
+                });
+              }
+
+              resolve({ tests, passed, failed, open, rows: rowsOut });
+            }
+
+            (async () => {
+              try {
+                const res = runFn();
+                if (res && typeof res.then === 'function') {
+                  await res;
+                }
+
+                const loadingEl = doc.getElementById('loading');
+                if (loadingEl) {
+                  const checkDone = () => {
+                    const style = getComputedStyle(loadingEl);
+                    if (style.display === 'none' || style.display === '') {
+                      setTimeout(collectResults, 300);
+                    } else {
+                      setTimeout(checkDone, 400);
+                    }
+                  };
+                  checkDone();
+                } else {
+                  setTimeout(collectResults, 2000);
+                }
               } catch (e) {
                 console.error(e);
                 resolve({ tests: 0, passed: 0, failed: 1, open: 1, rows: [] });
               }
-            }
-
-            iframe.addEventListener('load', onLoad);
-            loadToolIntoIframe(code);
-          });
-        }
-
-        function loadToolIntoIframe(code) {
-          const html = TOOL_HTML[code];
-          if (!html) {
-            iframe.srcdoc = `<html><body style="font-family:sans-serif;padding:12px;">
-      <p>No HTML embedded for tool: <b>${code}</b>.</p>
-    </body></html>`;
-            return;
-          }
-          iframe.srcdoc = html;
-        }
-
-        /* â”€â”€â”€â”€â”€â”€â”€â”€â”€ UI Controls â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-        function openToolModal(code) {
-          const def = TOOL_DEFS.find(t => t.code === code);
-          document.getElementById('modal-title').innerText = def ? def.name : code;
-          const modal = document.getElementById('tool-modal');
-          modal.classList.add('active');
-          loadToolIntoIframe(code);
-        }
-
-        function closeToolModal() {
-          document.getElementById('tool-modal').classList.remove('active');
-          iframe.srcdoc = ''; // clear
-        }
-
-        function selectModule(code) {
-          openToolModal(code);
-        }
-
-        /* Open all tools quickly (no automation, just navigation) */
-        document.getElementById('btn-select-all-modules').addEventListener('click', () => {
-          const boxes = document.querySelectorAll('.module-run-checkbox');
-          const allChecked = [...boxes].every(b => b.checked);
-          boxes.forEach(b => b.checked = !allChecked);
-        });
-
-        function enterConsoleMode() {
-          document.body.classList.add('console-mode');
-          const c = document.getElementById('dash-console');
-          c.innerHTML = '';
-          logToConsole('Console Mode Active. Initializing...', 'info');
-        }
-
-        function exitConsoleMode() {
-          document.body.classList.remove('console-mode');
-        }
-        window.exitConsoleMode = exitConsoleMode;
-        window.closeToolModal = closeToolModal;
-
-        function logToConsole(msg, type = 'info') {
-          const c = document.getElementById('dash-console');
-          // c.style.display = 'block'; // Always block in focus mode
-          const div = document.createElement('div');
-          div.className = 'log-line log-' + type;
-          div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
-          c.appendChild(div);
-          c.scrollTop = c.scrollHeight;
-        }
-
-        function closeSummaryModal() {
-          document.getElementById('run-summary-modal').classList.remove('active');
-        }
-        window.closeSummaryModal = closeSummaryModal;
-
-        document.getElementById('btn-run-all').addEventListener('click', async () => {
-          // Collect selected tools from checkboxes
-          const selectedCodes = [...document.querySelectorAll('.module-run-checkbox:checked')].map(cb => cb.dataset.code);
-          if (!selectedCodes.length) {
-            alert('Please select at least one module to run using the checkboxes.');
-            return;
-          }
-
-          // ENTER FOCUS MODE
-          enterConsoleMode();
-          logToConsole(`Starting Run All... Selected tools: ${selectedCodes.length}`);
-
-          const btn = document.getElementById('btn-run-all');
-          btn.disabled = true;
-
-          let totalTests = 0, totalPassed = 0, totalFailed = 0, totalOpen = 0;
-          const allDetails = [];
-
-          for (const code of selectedCodes) {
-            logToConsole(`Preparing ${code}...`, 'info');
-
-            // Check Config
-            const cfg = CONFIGS.find(c => c.tool_code === code && c.is_enabled == 1);
-
-            // Validate Input existence
-            let inputsValid = false;
-            if (cfg) {
-              try {
-                const parsed = JSON.parse(cfg.config_json || '{}');
-                const inp = (parsed.inputs || '').trim();
-                if (inp.length > 0) inputsValid = true;
-              } catch (e) { }
-            }
-
-            if (!cfg || !inputsValid) {
-              logToConsole(`SKIPPED ${code}: Missing or empty configuration inputs.`, 'error');
-              totalFailed++;
-              totalOpen++;
-              continue;
-            }
-
-            try {
-              logToConsole(`Running ${code}...`, 'info');
-              const result = await runToolWithConfig(code, cfg);
-              totalTests += result.tests || 0;
-              totalPassed += result.passed || 0;
-              totalFailed += result.failed || 0;
-              totalOpen += result.open || 0;
-              allDetails.push({
-                tool_code: code,
-                rows: result.rows || []
-              });
-
-              // LOG DETAILS
-              if (result.rows && result.rows.length) {
-                result.rows.forEach(r => {
-                  const s = r.status.toUpperCase();
-                  const isFail = ['FAILED', 'ERROR', 'OUT OF STOCK'].includes(s);
-                  const type = isFail ? 'warn' : 'success';
-                  const icon = isFail ? 'âŒ' : 'âœ…';
-                  logToConsole(`  -> ${icon} [${s}] ${r.url}`, type);
-                });
-              }
-
-              if (result.failed > 0) {
-                logToConsole(`${code} Finished: ${result.passed} Pass, ${result.failed} Fail`, 'error');
-              } else {
-                logToConsole(`${code} Finished: ${result.passed} Pass, ${result.failed} Fail`, 'success');
-              }
-
-            } catch (e) {
-              console.error('Error running tool', code, e);
-              logToConsole(`Error running ${code}: ${e.message}`, 'error');
-              totalFailed += 1;
-              totalOpen += 1;
-            }
-          }
-
-          const status = totalFailed > 0 ? 'failed' : 'passed';
-          const notes = 'Run All Tests via dashboard (tools: ' + selectedCodes.join(', ') + ')';
-
-          try {
-            logToConsole('Saving Run Report...', 'info');
-            await api('save-run', {
-              status: status,
-              total_tests: totalTests,
-              passed: totalPassed,
-              failed: totalFailed,
-              open_issues: totalOpen,
-              notes: notes,
-              details: allDetails
-            });
-            await Promise.all([loadRuns(), loadStats()]);
-            logToConsole('Run Saved Successfully.', 'success');
-            logToConsole('Run All Tests completed.', 'info');
-
-            // Auto-close console and show summary
-            setTimeout(() => {
-              exitConsoleMode();
-
-              // Show Summary Modal
-              document.getElementById('sum-total').innerText = totalTests;
-              document.getElementById('sum-passed').innerText = totalPassed;
-              document.getElementById('sum-failed').innerText = totalFailed;
-              document.getElementById('sum-open').innerText = totalOpen;
-
-              const title = document.getElementById('summary-title');
-              const icon = document.getElementById('summary-icon');
-              if (totalFailed > 0) {
-                title.innerText = 'Run Completed with Errors';
-                title.style.color = '#d32f2f';
-                icon.innerHTML = '&#9888;&#65039;'; // Warning Emoji
-              } else {
-                title.innerText = 'Run Passed Successfully';
-                title.style.color = '#2e7d32';
-                icon.innerHTML = '&#9989;'; // Check Mark Emoji
-              }
-
-              document.getElementById('run-summary-modal').classList.add('active');
-
-            }, 1500); // Short delay to let user see "Saved" message
-
+            })();
           } catch (e) {
             console.error(e);
-            logToConsole('Error Saving Run: ' + e.message, 'error');
-            alert('Error saving run: ' + e.message);
-          } finally {
-            btn.disabled = false;
+            resolve({ tests: 0, passed: 0, failed: 1, open: 1, rows: [] });
           }
+        }
+
+        iframe.addEventListener('load', onLoad);
+        loadToolIntoIframe(code);
+      });
+    }
+
+    function loadToolIntoIframe(code) {
+      const html = TOOL_HTML[code];
+      if (!html) {
+        iframe.srcdoc = `<html><body style="font-family:sans-serif;padding:12px;">
+      <p>No HTML embedded for tool: <b>${code}</b>.</p>
+    </body></html>`;
+        return;
+      }
+      iframe.srcdoc = html;
+    }
+
+    /* â”€â”€â”€â”€â”€â”€â”€â”€â”€ UI Controls â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    function openToolModal(code) {
+      const def = TOOL_DEFS.find(t => t.code === code);
+      document.getElementById('modal-title').innerText = def ? def.name : code;
+      const modal = document.getElementById('tool-modal');
+      modal.classList.add('active');
+      loadToolIntoIframe(code);
+    }
+
+    function closeToolModal() {
+      document.getElementById('tool-modal').classList.remove('active');
+      iframe.srcdoc = ''; // clear
+    }
+
+    function selectModule(code) {
+      openToolModal(code);
+    }
+
+    /* Open all tools quickly (no automation, just navigation) */
+    document.getElementById('btn-select-all-modules').addEventListener('click', () => {
+      const boxes = document.querySelectorAll('.module-run-checkbox');
+      const allChecked = [...boxes].every(b => b.checked);
+      boxes.forEach(b => b.checked = !allChecked);
+    });
+
+    function enterConsoleMode() {
+      document.body.classList.add('console-mode');
+      const c = document.getElementById('dash-console');
+      c.innerHTML = '';
+      logToConsole('Console Mode Active. Initializing...', 'info');
+    }
+
+    function exitConsoleMode() {
+      document.body.classList.remove('console-mode');
+    }
+    window.exitConsoleMode = exitConsoleMode;
+    window.closeToolModal = closeToolModal;
+
+    function logToConsole(msg, type = 'info') {
+      const c = document.getElementById('dash-console');
+      // c.style.display = 'block'; // Always block in focus mode
+      const div = document.createElement('div');
+      div.className = 'log-line log-' + type;
+      div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      c.appendChild(div);
+      c.scrollTop = c.scrollHeight;
+    }
+
+    function closeSummaryModal() {
+      document.getElementById('run-summary-modal').classList.remove('active');
+    }
+    window.closeSummaryModal = closeSummaryModal;
+
+    document.getElementById('btn-run-all').addEventListener('click', async () => {
+      // Collect selected tools from checkboxes
+      const selectedCodes = [...document.querySelectorAll('.module-run-checkbox:checked')].map(cb => cb.dataset.code);
+      if (!selectedCodes.length) {
+        alert('Please select at least one module to run using the checkboxes.');
+        return;
+      }
+
+      // ENTER FOCUS MODE
+      enterConsoleMode();
+      logToConsole(`Starting Run All... Selected tools: ${selectedCodes.length}`);
+
+      const btn = document.getElementById('btn-run-all');
+      btn.disabled = true;
+
+      let totalTests = 0, totalPassed = 0, totalFailed = 0, totalOpen = 0;
+      const allDetails = [];
+
+      for (const code of selectedCodes) {
+        logToConsole(`Preparing ${code}...`, 'info');
+
+        // Check Config
+        const cfg = CONFIGS.find(c => c.tool_code === code && c.is_enabled == 1);
+
+        // Validate Input existence
+        let inputsValid = false;
+        if (cfg) {
+          try {
+            const parsed = JSON.parse(cfg.config_json || '{}');
+            const inp = (parsed.inputs || '').trim();
+            if (inp.length > 0) inputsValid = true;
+          } catch (e) { }
+        }
+
+        if (!cfg || !inputsValid) {
+          logToConsole(`SKIPPED ${code}: Missing or empty configuration inputs.`, 'error');
+          totalFailed++;
+          totalOpen++;
+          continue;
+        }
+
+        try {
+          logToConsole(`Running ${code}...`, 'info');
+          const result = await runToolWithConfig(code, cfg);
+          totalTests += result.tests || 0;
+          totalPassed += result.passed || 0;
+          totalFailed += result.failed || 0;
+          totalOpen += result.open || 0;
+          allDetails.push({
+            tool_code: code,
+            rows: result.rows || []
+          });
+
+          // LOG DETAILS
+          if (result.rows && result.rows.length) {
+            result.rows.forEach(r => {
+              const s = r.status.toUpperCase();
+              const isFail = ['FAILED', 'ERROR', 'OUT OF STOCK'].includes(s);
+              const type = isFail ? 'warn' : 'success';
+              const icon = isFail ? 'âŒ' : 'âœ…';
+              logToConsole(`  -> ${icon} [${s}] ${r.url}`, type);
+            });
+          }
+
+          if (result.failed > 0) {
+            logToConsole(`${code} Finished: ${result.passed} Pass, ${result.failed} Fail`, 'error');
+          } else {
+            logToConsole(`${code} Finished: ${result.passed} Pass, ${result.failed} Fail`, 'success');
+          }
+
+        } catch (e) {
+          console.error('Error running tool', code, e);
+          logToConsole(`Error running ${code}: ${e.message}`, 'error');
+          totalFailed += 1;
+          totalOpen += 1;
+        }
+      }
+
+      const status = totalFailed > 0 ? 'failed' : 'passed';
+      const notes = 'Run All Tests via dashboard (tools: ' + selectedCodes.join(', ') + ')';
+
+      try {
+        logToConsole('Saving Run Report...', 'info');
+        await api('save-run', {
+          status: status,
+          total_tests: totalTests,
+          passed: totalPassed,
+          failed: totalFailed,
+          open_issues: totalOpen,
+          notes: notes,
+          details: allDetails
         });
+        await Promise.all([loadRuns(), loadStats()]);
+        logToConsole('Run Saved Successfully.', 'success');
+        logToConsole('Run All Tests completed.', 'info');
 
-        /* Test runs */
-        function renderRunsTable(list) {
-          const tbody = document.querySelector('#runs-table tbody');
-          tbody.innerHTML = '';
-          list.forEach(r => {
-            const tr = document.createElement('tr');
-            tr.dataset.id = r.id;
-            // Show tools mini badges
-            let toolBadges = '';
-            if (r.tools) {
-              const tCodes = r.tools.split(',');
-              if (tCodes.length > 3) toolBadges = `<span class="badge" style="background:#eee;color:#555">${tCodes.length} tools</span>`;
-              else toolBadges = tCodes.map(c => `<span class="badge" style="background:#eef;color:#444">${c}</span>`).join(' ');
-            }
-            // User badge
-            const userName = r.user_name || 'Unknown';
-            const userHtml = `<div style="font-weight:bold; font-size:12px; color:#455a64;">${userName}</div>`;
+        // Auto-close console and show summary
+        setTimeout(() => {
+          exitConsoleMode();
 
-            tr.innerHTML = `
+          // Show Summary Modal
+          document.getElementById('sum-total').innerText = totalTests;
+          document.getElementById('sum-passed').innerText = totalPassed;
+          document.getElementById('sum-failed').innerText = totalFailed;
+          document.getElementById('sum-open').innerText = totalOpen;
+
+          const title = document.getElementById('summary-title');
+          const icon = document.getElementById('summary-icon');
+          if (totalFailed > 0) {
+            title.innerText = 'Run Completed with Errors';
+            title.style.color = '#d32f2f';
+            icon.innerHTML = '&#9888;&#65039;'; // Warning Emoji
+          } else {
+            title.innerText = 'Run Passed Successfully';
+            title.style.color = '#2e7d32';
+            icon.innerHTML = '&#9989;'; // Check Mark Emoji
+          }
+
+          document.getElementById('run-summary-modal').classList.add('active');
+
+        }, 1500); // Short delay to let user see "Saved" message
+
+      } catch (e) {
+        console.error(e);
+        logToConsole('Error Saving Run: ' + e.message, 'error');
+        alert('Error saving run: ' + e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    /* Test runs */
+    function renderRunsTable(list) {
+      const tbody = document.querySelector('#runs-table tbody');
+      tbody.innerHTML = '';
+      list.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.dataset.id = r.id;
+        // Show tools mini badges
+        let toolBadges = '';
+        if (r.tools) {
+          const tCodes = r.tools.split(',');
+          if (tCodes.length > 3) toolBadges = `<span class="badge" style="background:#eee;color:#555">${tCodes.length} tools</span>`;
+          else toolBadges = tCodes.map(c => `<span class="badge" style="background:#eef;color:#444">${c}</span>`).join(' ');
+        }
+        // User badge
+        const userName = r.user_name || 'Unknown';
+        const userHtml = `<div style="font-weight:bold; font-size:12px; color:#455a64;">${userName}</div>`;
+
+        tr.innerHTML = `
       <td>${r.id}</td>
       <td>
         <div>${r.run_date}</div>
@@ -7674,207 +7671,207 @@ $TOOL_DEFS = [
       <td>${r.notes ? r.notes : ''}</td>
       <td class="table-actions"><button data-action="delete">Delete</button></td>
       <td><a href="qa_run_report.php?run_id=${r.id}" target="_blank" class="btn-small btn-secondary">Report</a></td>`;
-            tbody.appendChild(tr);
-          });
+        tbody.appendChild(tr);
+      });
+    }
+
+    function applyRunFilters() {
+      const st = document.getElementById('filter-status').value.toLowerCase();
+      const tc = document.getElementById('filter-tool').value;
+
+      const uid = document.getElementById('filter-user').value;
+
+      const filtered = RUNS.filter(r => {
+        // Status filter
+        if (st && (r.status || '').toLowerCase() !== st) return false;
+        // Tool filter
+        if (tc) {
+          const runTools = (r.tools || '').split(',');
+          if (!runTools.includes(tc)) return false;
         }
-
-        function applyRunFilters() {
-          const st = document.getElementById('filter-status').value.toLowerCase();
-          const tc = document.getElementById('filter-tool').value;
-
-          const uid = document.getElementById('filter-user').value;
-
-          const filtered = RUNS.filter(r => {
-            // Status filter
-            if (st && (r.status || '').toLowerCase() !== st) return false;
-            // Tool filter
-            if (tc) {
-              const runTools = (r.tools || '').split(',');
-              if (!runTools.includes(tc)) return false;
-            }
-            // User Filter
-            if (uid) {
-              if (r.user_id != uid) return false;
-            }
-            return true;
-          });
-          document.getElementById('filtered-total').textContent = filtered.length;
-          renderRunsTable(filtered);
+        // User Filter
+        if (uid) {
+          if (r.user_id != uid) return false;
         }
+        return true;
+      });
+      document.getElementById('filtered-total').textContent = filtered.length;
+      renderRunsTable(filtered);
+    }
 
-        function downloadRunsCSV() {
-          const st = document.getElementById('filter-status').value.toLowerCase();
-          const tc = document.getElementById('filter-tool').value;
-          const uid = document.getElementById('filter-user').value;
+    function downloadRunsCSV() {
+      const st = document.getElementById('filter-status').value.toLowerCase();
+      const tc = document.getElementById('filter-tool').value;
+      const uid = document.getElementById('filter-user').value;
 
-          // Re-filter to ensure we export what is seen (or we could store filtered state)
-          const filtered = RUNS.filter(r => {
-            if (st && (r.status || '').toLowerCase() !== st) return false;
-            if (tc) {
-              const runTools = (r.tools || '').split(',');
-              if (!runTools.includes(tc)) return false;
-            }
-            if (uid && r.user_id != uid) return false;
-            return true;
-          });
-
-          if (!filtered.length) {
-            alert('No runs to export');
-            return;
-          }
-
-          // Header
-          const headers = ['ID', 'Date', 'User', 'Status', 'Tools', 'Total Tests', 'Passed', 'Failed', 'Open Issues', 'Notes'];
-          const csvRows = [headers.join(',')];
-
-          filtered.forEach(r => {
-            const tools = (r.tools || '').replace(/,/g, ';'); // escape commas
-            const note = (r.notes || '').replace(/"/g, '""');
-            const row = [
-              r.id,
-              r.run_date,
-              '"' + (r.user_name || '') + '"',
-              r.status,
-              `"${tools}"`,
-              r.total_tests,
-              r.passed,
-              r.failed,
-              r.open_issues,
-              `"${note}"`
-            ];
-            csvRows.push(row.join(','));
-          });
-
-          const blob = new Blob(['\uFEFF' + csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.setAttribute('hidden', '');
-          a.setAttribute('href', url);
-          const dateStr = new Date().toISOString().slice(0, 10);
-          a.setAttribute('download', `QA_Test_Runs_Summary_${dateStr}.csv`);
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
+      // Re-filter to ensure we export what is seen (or we could store filtered state)
+      const filtered = RUNS.filter(r => {
+        if (st && (r.status || '').toLowerCase() !== st) return false;
+        if (tc) {
+          const runTools = (r.tools || '').split(',');
+          if (!runTools.includes(tc)) return false;
         }
+        if (uid && r.user_id != uid) return false;
+        return true;
+      });
 
-        function setRunFilter(status) {
-          const sel = document.getElementById('filter-status');
-          if (sel) {
-            sel.value = status;
-            applyRunFilters();
-            // Scroll to table
-            document.getElementById('runs-table').scrollIntoView({ behavior: 'smooth' });
-          }
+      if (!filtered.length) {
+        alert('No runs to export');
+        return;
+      }
+
+      // Header
+      const headers = ['ID', 'Date', 'User', 'Status', 'Tools', 'Total Tests', 'Passed', 'Failed', 'Open Issues', 'Notes'];
+      const csvRows = [headers.join(',')];
+
+      filtered.forEach(r => {
+        const tools = (r.tools || '').replace(/,/g, ';'); // escape commas
+        const note = (r.notes || '').replace(/"/g, '""');
+        const row = [
+          r.id,
+          r.run_date,
+          '"' + (r.user_name || '') + '"',
+          r.status,
+          `"${tools}"`,
+          r.total_tests,
+          r.passed,
+          r.failed,
+          r.open_issues,
+          `"${note}"`
+        ];
+        csvRows.push(row.join(','));
+      });
+
+      const blob = new Blob(['\uFEFF' + csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.setAttribute('hidden', '');
+      a.setAttribute('href', url);
+      const dateStr = new Date().toISOString().slice(0, 10);
+      a.setAttribute('download', `QA_Test_Runs_Summary_${dateStr}.csv`);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function setRunFilter(status) {
+      const sel = document.getElementById('filter-status');
+      if (sel) {
+        sel.value = status;
+        applyRunFilters();
+        // Scroll to table
+        document.getElementById('runs-table').scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    /* Test runs */
+    async function loadRuns() {
+      RUNS = await api('list-runs');
+      updateChartsFromRuns();
+
+      // Populate Tool Filter Dropdown if empty
+      const tf = document.getElementById('filter-tool');
+      if (tf && tf.options.length <= 1) {
+        TOOL_DEFS.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.code;
+          opt.innerText = t.name;
+          tf.appendChild(opt);
+        });
+      }
+
+      // Populate User Filter if visible (Admins/Viewers)
+      const uf = document.getElementById('filter-user');
+      if (uf && uf.offsetParent !== null && uf.options.length <= 1) {
+        const allUsers = await api('list-users');
+        allUsers.forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.id;
+          opt.innerText = u.name;
+          uf.appendChild(opt);
+        });
+      }
+
+      applyRunFilters();
+    }
+
+    document.getElementById('filter-status').addEventListener('change', applyRunFilters);
+    document.getElementById('filter-tool').addEventListener('change', applyRunFilters);
+    document.getElementById('filter-user').addEventListener('change', applyRunFilters);
+
+    async function showRunDetails(runId) {
+      const panel = document.getElementById('run-details-panel');
+      const container = document.getElementById('run-details-content');
+      if (!panel || !container) return;
+
+      container.innerHTML = '<p class="text-muted">Loading run details...</p>';
+      panel.style.display = 'block';
+
+      try {
+        const rows = await api('run-details', { id: runId });
+        if (!rows || !rows.length) {
+          container.innerHTML = '<p class="text-muted">No detailed link data stored for this run.</p>';
+          return;
         }
-
-        /* Test runs */
-        async function loadRuns() {
-          RUNS = await api('list-runs');
-          updateChartsFromRuns();
-
-          // Populate Tool Filter Dropdown if empty
-          const tf = document.getElementById('filter-tool');
-          if (tf && tf.options.length <= 1) {
-            TOOL_DEFS.forEach(t => {
-              const opt = document.createElement('option');
-              opt.value = t.code;
-              opt.innerText = t.name;
-              tf.appendChild(opt);
-            });
-          }
-
-          // Populate User Filter if visible (Admins/Viewers)
-          const uf = document.getElementById('filter-user');
-          if (uf && uf.offsetParent !== null && uf.options.length <= 1) {
-            const allUsers = await api('list-users');
-            allUsers.forEach(u => {
-              const opt = document.createElement('option');
-              opt.value = u.id;
-              opt.innerText = u.name;
-              uf.appendChild(opt);
-            });
-          }
-
-          applyRunFilters();
-        }
-
-        document.getElementById('filter-status').addEventListener('change', applyRunFilters);
-        document.getElementById('filter-tool').addEventListener('change', applyRunFilters);
-        document.getElementById('filter-user').addEventListener('change', applyRunFilters);
-
-        async function showRunDetails(runId) {
-          const panel = document.getElementById('run-details-panel');
-          const container = document.getElementById('run-details-content');
-          if (!panel || !container) return;
-
-          container.innerHTML = '<p class="text-muted">Loading run details...</p>';
-          panel.style.display = 'block';
-
-          try {
-            const rows = await api('run-details', { id: runId });
-            if (!rows || !rows.length) {
-              container.innerHTML = '<p class="text-muted">No detailed link data stored for this run.</p>';
-              return;
-            }
-            const header = '<table class="run-details-table"><thead><tr><th>Tool</th><th>Status</th><th>URL</th><th>Parent</th></tr></thead><tbody>';
-            const body = rows.map(r => {
-              const status = (r.status || '').toString();
-              let badgeClass = 'run-details-badge';
-              const upper = status.toUpperCase();
-              if (upper === 'OK') badgeClass += ' ok';
-              else badgeClass += ' fail';
-              const safeTool = (r.tool_code || '').toString();
-              const safeUrl = (r.url || '').toString();
-              const safeParent = (r.parent || '').toString();
-              return `<tr>
+        const header = '<table class="run-details-table"><thead><tr><th>Tool</th><th>Status</th><th>URL</th><th>Parent</th></tr></thead><tbody>';
+        const body = rows.map(r => {
+          const status = (r.status || '').toString();
+          let badgeClass = 'run-details-badge';
+          const upper = status.toUpperCase();
+          if (upper === 'OK') badgeClass += ' ok';
+          else badgeClass += ' fail';
+          const safeTool = (r.tool_code || '').toString();
+          const safeUrl = (r.url || '').toString();
+          const safeParent = (r.parent || '').toString();
+          return `<tr>
         <td>${safeTool}</td>
         <td><span class="${badgeClass}">${status}</span></td>
         <td>${safeUrl}</td>
         <td>${safeParent}</td>
       </tr>`;
-            }).join('');
-            container.innerHTML = header + body + '</tbody></table>';
-          } catch (e) {
-            console.error(e);
-            container.innerHTML = '<p class="text-danger">Failed to load run details: ' + e.message + '</p>';
-          }
-        }
+        }).join('');
+        container.innerHTML = header + body + '</tbody></table>';
+      } catch (e) {
+        console.error(e);
+        container.innerHTML = '<p class="text-danger">Failed to load run details: ' + e.message + '</p>';
+      }
+    }
 
-        document.querySelector('#runs-table').addEventListener('click', async (e) => {
-          const btn = e.target.closest('button');
-          if (btn && btn.dataset.action === 'delete') {
-            const tr = btn.closest('tr'); const id = parseInt(tr.dataset.id, 10);
-            if (!confirm('Delete this test run?')) return;
-            await api('delete-run', { id: id });
-            await Promise.all([loadRuns(), loadStats()]);
-            const panel = document.getElementById('run-details-panel');
-            if (panel) panel.style.display = 'none';
-            return;
-          }
+    document.querySelector('#runs-table').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (btn && btn.dataset.action === 'delete') {
+        const tr = btn.closest('tr'); const id = parseInt(tr.dataset.id, 10);
+        if (!confirm('Delete this test run?')) return;
+        await api('delete-run', { id: id });
+        await Promise.all([loadRuns(), loadStats()]);
+        const panel = document.getElementById('run-details-panel');
+        if (panel) panel.style.display = 'none';
+        return;
+      }
 
-          const tr = e.target.closest('tr');
-          if (!tr || !tr.dataset.id) return;
-          const runId = parseInt(tr.dataset.id, 10);
-          if (!runId) return;
-          await showRunDetails(runId);
-        });
+      const tr = e.target.closest('tr');
+      if (!tr || !tr.dataset.id) return;
+      const runId = parseInt(tr.dataset.id, 10);
+      if (!runId) return;
+      await showRunDetails(runId);
+    });
 
 
 
-        /* Configs */
-        async function loadConfigs() {
-          CONFIGS = await api('list-configs');
-          const tbody = document.querySelector('#configs-table tbody');
-          tbody.innerHTML = '';
-          CONFIGS.forEach((cfg, i) => {
-            let snippet = '';
-            try {
-              const json = JSON.parse(cfg.config_json || '{}');
-              snippet = (json.inputs || '').toString().slice(0, 60).replace(/\s+/g, ' ');
-            } catch (e) { }
-            const tr = document.createElement('tr');
-            tr.dataset.id = cfg.id;
-            tr.innerHTML = `
+    /* Configs */
+    async function loadConfigs() {
+      CONFIGS = await api('list-configs');
+      const tbody = document.querySelector('#configs-table tbody');
+      tbody.innerHTML = '';
+      CONFIGS.forEach((cfg, i) => {
+        let snippet = '';
+        try {
+          const json = JSON.parse(cfg.config_json || '{}');
+          snippet = (json.inputs || '').toString().slice(0, 60).replace(/\s+/g, ' ');
+        } catch (e) { }
+        const tr = document.createElement('tr');
+        tr.dataset.id = cfg.id;
+        tr.innerHTML = `
       <td>${i + 1}</td>
       <td>${cfg.config_name}</td>
       <td>${cfg.tool_code}</td>
@@ -7884,69 +7881,69 @@ $TOOL_DEFS = [
         <button data-action="edit">Edit</button>
         <button data-action="delete">Delete</button>
       </td>`;
-            tbody.appendChild(tr);
-          });
-        }
+        tbody.appendChild(tr);
+      });
+    }
 
-        document.querySelector('#configs-table').addEventListener('click', async (e) => {
-          const btn = e.target.closest('button'); if (!btn) return;
-          const tr = btn.closest('tr'); const id = parseInt(tr.dataset.id, 10);
-          const cfg = CONFIGS.find(c => c.id == id); if (!cfg) return;
+    document.querySelector('#configs-table').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button'); if (!btn) return;
+      const tr = btn.closest('tr'); const id = parseInt(tr.dataset.id, 10);
+      const cfg = CONFIGS.find(c => c.id == id); if (!cfg) return;
 
-          if (btn.dataset.action === 'edit') {
-            document.getElementById('cfg-id').value = cfg.id;
-            document.getElementById('cfg-name').value = cfg.config_name;
-            document.getElementById('cfg-tool-code').value = cfg.tool_code;
-            document.getElementById('cfg-enabled').checked = !!cfg.is_enabled;
-            try {
-              const json = JSON.parse(cfg.config_json || '{}');
-              document.getElementById('cfg-inputs').value = json.inputs || '';
-            } catch (e) { }
-          } else if (btn.dataset.action === 'delete') {
-            if (!confirm('Delete configuration "' + cfg.config_name + '"?')) return;
-            await api('delete-config', { id: cfg.id });
-            await loadConfigs();
-          }
-        });
+      if (btn.dataset.action === 'edit') {
+        document.getElementById('cfg-id').value = cfg.id;
+        document.getElementById('cfg-name').value = cfg.config_name;
+        document.getElementById('cfg-tool-code').value = cfg.tool_code;
+        document.getElementById('cfg-enabled').checked = !!cfg.is_enabled;
+        try {
+          const json = JSON.parse(cfg.config_json || '{}');
+          document.getElementById('cfg-inputs').value = json.inputs || '';
+        } catch (e) { }
+      } else if (btn.dataset.action === 'delete') {
+        if (!confirm('Delete configuration "' + cfg.config_name + '"?')) return;
+        await api('delete-config', { id: cfg.id });
+        await loadConfigs();
+      }
+    });
 
-        document.getElementById('cfg-save-btn').addEventListener('click', async () => {
-          const id = document.getElementById('cfg-id').value || null;
-          const name = document.getElementById('cfg-name').value.trim();
-          const tool = document.getElementById('cfg-tool-code').value;
-          const inputs = document.getElementById('cfg-inputs').value.trim();
-          const enabled = document.getElementById('cfg-enabled').checked;
+    document.getElementById('cfg-save-btn').addEventListener('click', async () => {
+      const id = document.getElementById('cfg-id').value || null;
+      const name = document.getElementById('cfg-name').value.trim();
+      const tool = document.getElementById('cfg-tool-code').value;
+      const inputs = document.getElementById('cfg-inputs').value.trim();
+      const enabled = document.getElementById('cfg-enabled').checked;
 
-          if (!name || !tool) {
-            alert('Configuration name and tool are required.');
-            return;
-          }
+      if (!name || !tool) {
+        alert('Configuration name and tool are required.');
+        return;
+      }
 
-          await api('save-config', {
-            id: id, tool_code: tool, config_name: name,
-            config: { inputs: inputs }, is_enabled: enabled ? 1 : 0
-          });
+      await api('save-config', {
+        id: id, tool_code: tool, config_name: name,
+        config: { inputs: inputs }, is_enabled: enabled ? 1 : 0
+      });
 
-          document.getElementById('config-form').reset();
-          document.getElementById('cfg-id').value = '';
-          document.getElementById('cfg-enabled').checked = true;
-          await loadConfigs();
-        });
+      document.getElementById('config-form').reset();
+      document.getElementById('cfg-id').value = '';
+      document.getElementById('cfg-enabled').checked = true;
+      await loadConfigs();
+    });
 
-        document.getElementById('cfg-reset-btn').addEventListener('click', () => {
-          document.getElementById('config-form').reset();
-          document.getElementById('cfg-id').value = '';
-          document.getElementById('cfg-enabled').checked = true;
-        });
+    document.getElementById('cfg-reset-btn').addEventListener('click', () => {
+      document.getElementById('config-form').reset();
+      document.getElementById('cfg-id').value = '';
+      document.getElementById('cfg-enabled').checked = true;
+    });
 
-        /* Users */
-        async function loadUsers() {
-          USERS = await api('list-users');
-          const tbody = document.querySelector('#users-table tbody');
-          tbody.innerHTML = '';
-          USERS.forEach((u, i) => {
-            const tr = document.createElement('tr');
-            tr.dataset.id = u.id;
-            tr.innerHTML = `
+    /* Users */
+    async function loadUsers() {
+      USERS = await api('list-users');
+      const tbody = document.querySelector('#users-table tbody');
+      tbody.innerHTML = '';
+      USERS.forEach((u, i) => {
+        const tr = document.createElement('tr');
+        tr.dataset.id = u.id;
+        tr.innerHTML = `
       <td>${i + 1}</td>
       <td>${u.name}</td>
       <td>${u.email}</td>
@@ -7956,146 +7953,146 @@ $TOOL_DEFS = [
         <button data-action="edit">Edit</button>
         <button data-action="delete">Delete</button>
       </td>`;
-            tbody.appendChild(tr);
-          });
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.querySelector('#users-table').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button'); if (!btn) return;
+      const tr = btn.closest('tr'); const id = parseInt(tr.dataset.id, 10);
+      const u = USERS.find(x => x.id == id); if (!u) return;
+
+      if (btn.dataset.action === 'edit') {
+        document.getElementById('user-id').value = u.id;
+        document.getElementById('user-name').value = u.name;
+        document.getElementById('user-email').value = u.email;
+        document.getElementById('user-role').value = u.role;
+        document.getElementById('user-active').checked = !!u.is_active;
+      } else if (btn.dataset.action === 'delete') {
+        if (!confirm('Delete user \"' + u.name + '\"?')) return;
+        await api('delete-user', { id: u.id });
+        await loadUsers();
+      }
+    });
+
+    document.getElementById('user-save-btn').addEventListener('click', async () => {
+      const id = document.getElementById('user-id').value || null;
+      const name = document.getElementById('user-name').value.trim();
+      const email = document.getElementById('user-email').value.trim();
+      const password = document.getElementById('user-password').value.trim();
+      const role = document.getElementById('user-role').value;
+      const active = document.getElementById('user-active').checked;
+
+      if (!name || !email) {
+        alert('Name and email are required.');
+        return;
+      }
+
+      await api('save-user', { id: id, name: name, email: email, password: password, role: role, is_active: active ? 1 : 0 });
+
+      document.getElementById('user-form').reset();
+      document.getElementById('user-id').value = '';
+      document.getElementById('user-active').checked = true;
+      await loadUsers();
+    });
+
+    document.getElementById('user-reset-btn').addEventListener('click', () => {
+      document.getElementById('user-form').reset();
+      document.getElementById('user-id').value = '';
+      document.getElementById('user-active').checked = true;
+    });
+
+    /* Stats */
+    async function loadStats() {
+      const s = await api('stats');
+      document.getElementById('stat-total').textContent = s.total_runs ?? 0;
+      document.getElementById('stat-passed').textContent = s.passed ?? 0;
+      document.getElementById('stat-failed').textContent = s.failed ?? 0;
+      document.getElementById('stat-open').textContent = s.open_issues ?? 0;
+    }
+    async function enforceRoleUI() {
+      if (typeof CURRENT_USER_ROLE === 'undefined') return;
+      const role = CURRENT_USER_ROLE.toLowerCase();
+
+      const tabConfigs = document.querySelector('button[data-tab="configs"]');
+      const tabUsers = document.querySelector('button[data-tab="users"]');
+      const tabSupport = document.querySelector('button[data-tab="support"]');
+      const suppAdmin = document.getElementById('support-admin-view');
+      const contactForm = document.getElementById('contact-support-form');
+      const myTickets = document.getElementById('my-support-tickets');
+
+      const userFilter = document.getElementById('filter-user-container');
+
+      // Default text
+      if (tabSupport) tabSupport.textContent = 'Support';
+
+      // User Filter Visibility
+      if (role === 'admin' || role === 'viewer') {
+        if (userFilter) userFilter.style.display = 'block';
+      } else {
+        if (userFilter) userFilter.style.display = 'none';
+      }
+
+      if (role === 'viewer') {
+        if (tabConfigs) tabConfigs.style.display = 'none';
+        if (tabUsers) tabUsers.style.display = 'none';
+      } else if (role === 'tester') {
+        if (tabUsers) tabUsers.style.display = 'none';
+      }
+
+      if (role === 'admin') {
+        if (contactForm) contactForm.style.display = 'none';
+        if (myTickets) myTickets.style.display = 'none'; // Admin doesn't need personal history here
+        if (suppAdmin) {
+          suppAdmin.style.display = 'block';
+          loadSupport();
         }
-
-        document.querySelector('#users-table').addEventListener('click', async (e) => {
-          const btn = e.target.closest('button'); if (!btn) return;
-          const tr = btn.closest('tr'); const id = parseInt(tr.dataset.id, 10);
-          const u = USERS.find(x => x.id == id); if (!u) return;
-
-          if (btn.dataset.action === 'edit') {
-            document.getElementById('user-id').value = u.id;
-            document.getElementById('user-name').value = u.name;
-            document.getElementById('user-email').value = u.email;
-            document.getElementById('user-role').value = u.role;
-            document.getElementById('user-active').checked = !!u.is_active;
-          } else if (btn.dataset.action === 'delete') {
-            if (!confirm('Delete user \"' + u.name + '\"?')) return;
-            await api('delete-user', { id: u.id });
-            await loadUsers();
-          }
-        });
-
-        document.getElementById('user-save-btn').addEventListener('click', async () => {
-          const id = document.getElementById('user-id').value || null;
-          const name = document.getElementById('user-name').value.trim();
-          const email = document.getElementById('user-email').value.trim();
-          const password = document.getElementById('user-password').value.trim();
-          const role = document.getElementById('user-role').value;
-          const active = document.getElementById('user-active').checked;
-
-          if (!name || !email) {
-            alert('Name and email are required.');
-            return;
-          }
-
-          await api('save-user', { id: id, name: name, email: email, password: password, role: role, is_active: active ? 1 : 0 });
-
-          document.getElementById('user-form').reset();
-          document.getElementById('user-id').value = '';
-          document.getElementById('user-active').checked = true;
-          await loadUsers();
-        });
-
-        document.getElementById('user-reset-btn').addEventListener('click', () => {
-          document.getElementById('user-form').reset();
-          document.getElementById('user-id').value = '';
-          document.getElementById('user-active').checked = true;
-        });
-
-        /* Stats */
-        async function loadStats() {
-          const s = await api('stats');
-          document.getElementById('stat-total').textContent = s.total_runs ?? 0;
-          document.getElementById('stat-passed').textContent = s.passed ?? 0;
-          document.getElementById('stat-failed').textContent = s.failed ?? 0;
-          document.getElementById('stat-open').textContent = s.open_issues ?? 0;
-        }
-        async function enforceRoleUI() {
-          if (typeof CURRENT_USER_ROLE === 'undefined') return;
-          const role = CURRENT_USER_ROLE.toLowerCase();
-
-          const tabConfigs = document.querySelector('button[data-tab="configs"]');
-          const tabUsers = document.querySelector('button[data-tab="users"]');
-          const tabSupport = document.querySelector('button[data-tab="support"]');
-          const suppAdmin = document.getElementById('support-admin-view');
-          const contactForm = document.getElementById('contact-support-form');
-          const myTickets = document.getElementById('my-support-tickets');
-
-          const userFilter = document.getElementById('filter-user-container');
-
-          // Default text
-          if (tabSupport) tabSupport.textContent = 'Support';
-
-          // User Filter Visibility
-          if (role === 'admin' || role === 'viewer') {
-            if (userFilter) userFilter.style.display = 'block';
-          } else {
-            if (userFilter) userFilter.style.display = 'none';
-          }
-
-          if (role === 'viewer') {
-            if (tabConfigs) tabConfigs.style.display = 'none';
-            if (tabUsers) tabUsers.style.display = 'none';
-          } else if (role === 'tester') {
-            if (tabUsers) tabUsers.style.display = 'none';
-          }
-
-          if (role === 'admin') {
-            if (contactForm) contactForm.style.display = 'none';
-            if (myTickets) myTickets.style.display = 'none'; // Admin doesn't need personal history here
-            if (suppAdmin) {
-              suppAdmin.style.display = 'block';
-              loadSupport();
-            }
-            if (tabSupport) {
-              tabSupport.textContent = 'Support Center';
-              const c = await api('get-unread-support');
-              if (c && c.count > 0) {
-                tabSupport.innerHTML += ` <span style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:11px;">${c.count}</span>`;
-              }
-            }
-          } else {
-            // Non-admin (User)
-            if (myTickets) {
-              myTickets.style.display = 'block';
-              loadMySupport();
-            }
+        if (tabSupport) {
+          tabSupport.textContent = 'Support Center';
+          const c = await api('get-unread-support');
+          if (c && c.count > 0) {
+            tabSupport.innerHTML += ` <span style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:11px;">${c.count}</span>`;
           }
         }
-        enforceRoleUI();
+      } else {
+        // Non-admin (User)
+        if (myTickets) {
+          myTickets.style.display = 'block';
+          loadMySupport();
+        }
+      }
+    }
+    enforceRoleUI();
 
-        /* Support Logic */
-        document.getElementById('btn-send-support').addEventListener('click', async () => {
-          const subject = document.getElementById('supp-subject').value;
-          const message = document.getElementById('supp-message').value;
-          const res = await api('save-support', { subject, message });
-          if (res.ok) {
-            alert('Message sent to support!');
-            document.getElementById('supp-subject').value = '';
-            document.getElementById('supp-message').value = '';
-            loadMySupport(); // Refresh list
-          } else {
-            alert('Error sending message');
-          }
-        });
+    /* Support Logic */
+    document.getElementById('btn-send-support').addEventListener('click', async () => {
+      const subject = document.getElementById('supp-subject').value;
+      const message = document.getElementById('supp-message').value;
+      const res = await api('save-support', { subject, message });
+      if (res.ok) {
+        alert('Message sent to support!');
+        document.getElementById('supp-subject').value = '';
+        document.getElementById('supp-message').value = '';
+        loadMySupport(); // Refresh list
+      } else {
+        alert('Error sending message');
+      }
+    });
 
-        async function loadSupport() {
-          const list = document.getElementById('support-list');
-          if (!list) return;
-          const msgs = await api('list-support');
-          list.innerText = '';
-          if (msgs.length === 0) {
-            list.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#888;">No messages found.</td></tr>';
-            return;
-          }
-          list.innerHTML = msgs.map(m => {
-            const isUnread = m.is_read == 0;
-            const style = isUnread ? 'font-weight:bold; background:#f0f8ff;' : '';
-            const replyStatus = m.admin_reply ? '<span style="color:green; font-weight:bold;">Replied</span>' : '<span style="color:orange;">Pending</span>';
-            return `
+    async function loadSupport() {
+      const list = document.getElementById('support-list');
+      if (!list) return;
+      const msgs = await api('list-support');
+      list.innerText = '';
+      if (msgs.length === 0) {
+        list.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#888;">No messages found.</td></tr>';
+        return;
+      }
+      list.innerHTML = msgs.map(m => {
+        const isUnread = m.is_read == 0;
+        const style = isUnread ? 'font-weight:bold; background:#f0f8ff;' : '';
+        const replyStatus = m.admin_reply ? '<span style="color:green; font-weight:bold;">Replied</span>' : '<span style="color:orange;">Pending</span>';
+        return `
             <tr style="${style} cursor:pointer;" onclick="toggleReplyRow(${m.id}, this)">
                 <td>${m.created_at}</td>
                 <td><strong>${m.user_name}</strong><br><small style="color:#888;">${m.user_email}</small></td>
@@ -8107,52 +8104,52 @@ $TOOL_DEFS = [
                     <p><strong>Message:</strong> ${m.message}</p>
                     <hr style="margin:10px 0; border:0; border-top:1px solid #ddd;">
                     ${m.admin_reply ?
-                `<div style="background:#e8f5e9; padding:10px; border-radius:4px; margin-bottom:10px;">
+            `<div style="background:#e8f5e9; padding:10px; border-radius:4px; margin-bottom:10px;">
                             <strong>Admin Reply (${m.reply_at}):</strong><br>${m.admin_reply}
                          </div>` :
-                `<div style="margin-bottom:10px;">
+            `<div style="margin-bottom:10px;">
                             <textarea id="reply-text-${m.id}" style="width:100%; height:80px; padding:8px;" placeholder="Type reply..."></textarea>
                             <button onclick="sendReply(${m.id})" class="btn-primary" style="margin-top:5px; padding:4px 10px; font-size:12px;">Send Reply</button>
                          </div>`
-              }
+          }
                 </td>
             </tr>
         `}).join('');
-        }
+    }
 
-        function toggleReplyRow(id, row) {
-          // Mark read if bold
-          if (row.style.fontWeight.includes('bold') || row.style.fontWeight === 'bold') {
-            api('mark-support-read', { id });
-            row.style.fontWeight = 'normal';
-            row.style.background = 'transparent';
-          }
-          const r = document.getElementById(`reply-row-${id}`);
-          r.style.display = r.style.display === 'none' ? 'table-row' : 'none';
-        }
+    function toggleReplyRow(id, row) {
+      // Mark read if bold
+      if (row.style.fontWeight.includes('bold') || row.style.fontWeight === 'bold') {
+        api('mark-support-read', { id });
+        row.style.fontWeight = 'normal';
+        row.style.background = 'transparent';
+      }
+      const r = document.getElementById(`reply-row-${id}`);
+      r.style.display = r.style.display === 'none' ? 'table-row' : 'none';
+    }
 
-        async function sendReply(id) {
-          const txt = document.getElementById(`reply-text-${id}`).value;
-          if (!txt) return alert('Enter reply');
-          const res = await api('reply-support', { id, reply: txt });
-          if (res.ok) {
-            alert('Replied!');
-            loadSupport();
-          } else {
-            alert('Error replying');
-          }
-        }
+    async function sendReply(id) {
+      const txt = document.getElementById(`reply-text-${id}`).value;
+      if (!txt) return alert('Enter reply');
+      const res = await api('reply-support', { id, reply: txt });
+      if (res.ok) {
+        alert('Replied!');
+        loadSupport();
+      } else {
+        alert('Error replying');
+      }
+    }
 
-        async function loadMySupport() {
-          const list = document.getElementById('my-support-list');
-          if (!list) return; // Might not exist yet in HTML
-          const msgs = await api('my-support-history');
-          list.innerHTML = '';
-          if (msgs.length === 0) {
-            list.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">No tickets yet.</div>';
-            return;
-          }
-          list.innerHTML = msgs.map(m => `
+    async function loadMySupport() {
+      const list = document.getElementById('my-support-list');
+      if (!list) return; // Might not exist yet in HTML
+      const msgs = await api('my-support-history');
+      list.innerHTML = '';
+      if (msgs.length === 0) {
+        list.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">No tickets yet.</div>';
+        return;
+      }
+      list.innerHTML = msgs.map(m => `
             <div style="border:1px solid #eee; padding:10px; margin-bottom:10px; border-radius:4px; background:white;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                    <strong>${m.subject}</strong>
@@ -8160,83 +8157,83 @@ $TOOL_DEFS = [
                 </div>
                 <div style="margin-bottom:5px; color:#555;">${m.message}</div>
                 ${m.admin_reply ?
-              `<div style="background:#f1f8e9; padding:8px; border-radius:4px; margin-top:5px; font-size:13px; border-left:3px solid #4caf50;">
+          `<div style="background:#f1f8e9; padding:8px; border-radius:4px; margin-top:5px; font-size:13px; border-left:3px solid #4caf50;">
                         <strong>Admin Reply:</strong> ${m.admin_reply}
                      </div>`
-              : '<div style="font-size:12px; color:orange; margin-top:5px;">Awaiting Reply...</div>'
-            }
+          : '<div style="font-size:12px; color:orange; margin-top:5px;">Awaiting Reply...</div>'
+        }
             </div>
         `).join('');
-        }
-        /* Profile Logic */
-        const profileModal = document.getElementById('profile-modal');
-        const profileDropdown = document.getElementById('profile-dropdown');
+    }
+    /* Profile Logic */
+    const profileModal = document.getElementById('profile-modal');
+    const profileDropdown = document.getElementById('profile-dropdown');
 
-        // Toggle Dropdown
-        document.getElementById('profile-trigger').addEventListener('click', (e) => {
-          // Only toggle if not clicking inside the dropdown
-          if (e.target.closest('.profile-dropdown')) return;
-          profileDropdown.classList.toggle('active');
-          e.stopPropagation();
-        });
+    // Toggle Dropdown
+    document.getElementById('profile-trigger').addEventListener('click', (e) => {
+      // Only toggle if not clicking inside the dropdown
+      if (e.target.closest('.profile-dropdown')) return;
+      profileDropdown.classList.toggle('active');
+      e.stopPropagation();
+    });
 
-        // Close Dropdown when clicking outside
-        document.addEventListener('click', () => {
-          profileDropdown.classList.remove('active');
-        });
+    // Close Dropdown when clicking outside
+    document.addEventListener('click', () => {
+      profileDropdown.classList.remove('active');
+    });
 
-        // Edit Profile Click
-        document.getElementById('menu-edit-profile').addEventListener('click', async (e) => {
-          e.stopPropagation(); // Prevent bubbling to header toggle
-          profileDropdown.classList.remove('active'); // Close menu
+    // Edit Profile Click
+    document.getElementById('menu-edit-profile').addEventListener('click', async (e) => {
+      e.stopPropagation(); // Prevent bubbling to header toggle
+      profileDropdown.classList.remove('active'); // Close menu
 
-          const u = await api('get-profile');
-          if (u && u.id) {
-            document.getElementById('prof-name').value = u.name;
-            document.getElementById('prof-avatar').value = u.avatar_url || '';
-            document.getElementById('profile-preview').src = u.avatar_url || `https://ui-avatars.com/api/?name=${u.name}`;
-            profileModal.classList.add('active'); // Open Modal
-          }
-        });
+      const u = await api('get-profile');
+      if (u && u.id) {
+        document.getElementById('prof-name').value = u.name;
+        document.getElementById('prof-avatar').value = u.avatar_url || '';
+        document.getElementById('profile-preview').src = u.avatar_url || `https://ui-avatars.com/api/?name=${u.name}`;
+        profileModal.classList.add('active'); // Open Modal
+      }
+    });
 
-        function closeProfileModal() {
-          profileModal.classList.remove('active');
-        }
+    function closeProfileModal() {
+      profileModal.classList.remove('active');
+    }
 
-        document.getElementById('save-profile-btn').addEventListener('click', async () => {
-          const name = document.getElementById('prof-name').value;
-          let avatar = document.getElementById('prof-avatar').value;
-          const pass = document.getElementById('prof-password').value;
-          const fileInput = document.getElementById('prof-file');
+    document.getElementById('save-profile-btn').addEventListener('click', async () => {
+      const name = document.getElementById('prof-name').value;
+      let avatar = document.getElementById('prof-avatar').value;
+      const pass = document.getElementById('prof-password').value;
+      const fileInput = document.getElementById('prof-file');
 
-          // Handle File Upload
-          if (fileInput.files.length > 0) {
-            const fd = new FormData();
-            fd.append('avatar', fileInput.files[0]);
-            try {
-              const upRes = await fetch('?api=upload-avatar', { method: 'POST', body: fd });
-              const upJson = await upRes.json();
-              if (upJson.ok) {
-                avatar = upJson.url;
-              } else {
-                alert('Upload failed: ' + upJson.error); return;
-              }
-            } catch (e) { alert('Upload failed'); return; }
-          }
-
-          const res = await api('update-profile', { name, avatar_url: avatar, password: pass });
-          if (res.ok) {
-            alert('Profile updated!');
-            location.reload();
+      // Handle File Upload
+      if (fileInput.files.length > 0) {
+        const fd = new FormData();
+        fd.append('avatar', fileInput.files[0]);
+        try {
+          const upRes = await fetch('?api=upload-avatar', { method: 'POST', body: fd });
+          const upJson = await upRes.json();
+          if (upJson.ok) {
+            avatar = upJson.url;
           } else {
-            alert('Error: ' + (res.error || 'Unknown'));
+            alert('Upload failed: ' + upJson.error); return;
           }
-        });
+        } catch (e) { alert('Upload failed'); return; }
+      }
 
-        /* Initial */
-        Promise.all([loadConfigs(), loadUsers(), loadRuns(), loadStats()])
-          .catch(console.error);
-      </script>
+      const res = await api('update-profile', { name, avatar_url: avatar, password: pass });
+      if (res.ok) {
+        alert('Profile updated!');
+        location.reload();
+      } else {
+        alert('Error: ' + (res.error || 'Unknown'));
+      }
+    });
+
+    /* Initial */
+    Promise.all([loadConfigs(), loadUsers(), loadRuns(), loadStats()])
+      .catch(console.error);
+  </script>
 </body>
 
 </html>
