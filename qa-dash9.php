@@ -15,7 +15,45 @@ if (isset($_GET['api'])) {
   header('Content-Type: application/json; charset=utf-8');
 
   $action = $_GET['api'];
-  $db = get_db_auth(); // Use auth_session connection
+  $db = get_db_auth();
+
+  // Handle File Upload separately (Multipart)
+  if ($action === 'upload-avatar') {
+    if (!isset($_FILES['avatar'])) {
+      http_response_code(400);
+      echo json_encode(['error' => 'No file uploaded']);
+      exit;
+    }
+
+    $file = $_FILES['avatar'];
+    $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!in_array($file['type'], $allowed)) {
+      http_response_code(400);
+      echo json_encode(['error' => 'Invalid file type']);
+      exit;
+    }
+
+    if ($file['size'] > 5 * 1024 * 1024) {
+      http_response_code(400);
+      echo json_encode(['error' => 'File too large (Max 5MB)']);
+      exit;
+    }
+
+    $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+    $filename = 'user_' . current_user()['id'] . '_' . time() . '.' . $ext;
+    $targetDir = 'uploads/';
+    if (!is_dir($targetDir))
+      mkdir($targetDir, 0755, true);
+
+    if (move_uploaded_file($file['tmp_name'], $targetDir . $filename)) {
+      echo json_encode(['ok' => true, 'url' => $targetDir . $filename]);
+    } else {
+      http_response_code(500);
+      echo json_encode(['error' => 'Failed to move uploaded file']);
+    }
+    exit;
+  }
+
   $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
   try {
@@ -138,6 +176,32 @@ if (isset($_GET['api'])) {
 
         $_SESSION['user_name'] = $name;
         echo json_encode(['ok' => true]);
+        break;
+
+      /* Support System */
+      case 'save-support':
+        $uid = current_user()['id'];
+        $sub = $input['subject'] ?? 'No Subject';
+        $msg = $input['message'] ?? '';
+        if (!$msg) {
+          echo json_encode(['error' => 'Message empty']);
+          break;
+        }
+
+        $stmt = $db->prepare("INSERT INTO qa_support_messages (user_id, subject, message) VALUES (?, ?, ?)");
+        $stmt->execute([$uid, $sub, $msg]);
+        echo json_encode(['ok' => true]);
+        break;
+
+      case 'list-support':
+        require_role(['admin']);
+        $stmt = $db->query("
+            SELECT m.*, u.name as user_name, u.email as user_email 
+            FROM qa_support_messages m 
+            JOIN qa_users u ON m.user_id = u.id 
+            ORDER BY m.created_at DESC LIMIT 50
+        ");
+        echo json_encode($stmt->fetchAll());
         break;
 
       case 'get-profile':
@@ -5874,6 +5938,17 @@ function qa_db(): PDO
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
+  $pdo->exec("
+        CREATE TABLE IF NOT EXISTS qa_support_messages (
+          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+          user_id INT UNSIGNED NOT NULL,
+          subject VARCHAR(191),
+          message TEXT,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_support_user (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
   // Dynamic Migrations (Idempotent)
   try {
     $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'avatar_url'")->fetchAll();
@@ -6522,22 +6597,24 @@ $TOOL_DEFS = [
         style="display:flex; align-items:center; gap:10px; cursor:pointer;position:relative;">
         <div style="text-align:right;">
           <div style="font-weight:600; font-size:14px;" id="header-username">
-            <?php echo htmlspecialchars($currentUser['name'] ?? 'Guest'); ?></div>
+            <?php echo htmlspecialchars($currentUser['name'] ?? 'Guest'); ?>
+          </div>
           <div style="font-size:11px; color:var(--muted); text-transform:uppercase;">
-            <?php echo htmlspecialchars($currentUser['role'] ?? 'Viewer'); ?></div>
+            <?php echo htmlspecialchars($currentUser['role'] ?? 'Viewer'); ?>
+          </div>
         </div>
         <img id="header-avatar"
           src="<?php echo htmlspecialchars($currentUser['avatar_url'] ?? 'https://ui-avatars.com/api/?name=' . urlencode($currentUser['name'] ?? 'User')); ?>"
           style="width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
-        
+
         <!-- Dropdown Menu -->
         <div class="profile-dropdown" id="profile-dropdown">
-            <div class="dropdown-item" id="menu-edit-profile">
-                <span>Edit Profile</span>
-            </div>
-            <div class="dropdown-item" onclick="location.href='logout.php'" style="color:#c62828;">
-                <span>Logout</span>
-            </div>
+          <div class="dropdown-item" id="menu-edit-profile">
+            <span>Edit Profile</span>
+          </div>
+          <div class="dropdown-item" onclick="location.href='logout.php'" style="color:#c62828;">
+            <span>Logout</span>
+          </div>
         </div>
       </div>
     </header>
@@ -6546,6 +6623,7 @@ $TOOL_DEFS = [
       <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
       <button class="tab-btn" data-tab="configs">Configurations</button>
       <button class="tab-btn" data-tab="users">Users</button>
+      <button class="tab-btn" data-tab="support">Support Center</button>
     </div>
 
     <!-- DASHBOARD TAB -->
@@ -6695,9 +6773,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                    </option>
+                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                  </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -6818,6 +6896,51 @@ $TOOL_DEFS = [
     </div>
   </div>
 
+  <!-- SUPPORT TAB -->
+  <section id="tab-support" class="tab-content">
+    <!-- User View: Send Message -->
+    <div class="section-card">
+      <div class="section-header">
+        <h2>Contact Support</h2>
+      </div>
+      <div class="form-grid" style="grid-template-columns: 1fr;">
+        <div class="form-field">
+          <label>Subject</label>
+          <input type="text" id="supp-subject" placeholder="Feature Request, Bug Report...">
+        </div>
+        <div class="form-field">
+          <label>Message</label>
+          <textarea id="supp-message"
+            style="width:100%; min-height:100px; padding:10px; border:1px solid #ddd;"></textarea>
+        </div>
+        <div style="text-align:right;">
+          <button class="btn-primary" id="btn-send-support">Send Message</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin View: Inbox (Hidden by default) -->
+    <div class="section-card" id="support-admin-view" style="display:none; margin-top:20px;">
+      <div class="section-header">
+        <h2>Support Inbox (Admin)</h2>
+        <button class="btn-secondary" onclick="loadSupport()">Refresh</button>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>User</th>
+            <th>Subject</th>
+            <th>Message</th>
+          </tr>
+        </thead>
+        <tbody id="support-list">
+          <!-- Rows here -->
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <!-- PROFILE MODAL -->
   <div class="modal-overlay" id="profile-modal">
     <div class="modal-card" style="max-width:400px; height:auto; max-height:90%;">
@@ -6830,6 +6953,9 @@ $TOOL_DEFS = [
           <div style="text-align:center; margin-bottom:20px;">
             <img id="profile-preview" src=""
               style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:1px solid #ddd;">
+            <div style="margin-top:10px;">
+              <input type="file" id="prof-file" accept="image/*" style="font-size:12px;">
+            </div>
           </div>
           <div class="form-group" style="margin-bottom:15px;">
             <label style="display:block; font-size:13px; margin-bottom:5px;">Name</label>
@@ -7780,6 +7906,7 @@ $TOOL_DEFS = [
 
       const tabConfigs = document.querySelector('button[data-tab="configs"]');
       const tabUsers = document.querySelector('button[data-tab="users"]');
+      const suppAdmin = document.getElementById('support-admin-view');
 
       if (role === 'viewer') {
         if (tabConfigs) tabConfigs.style.display = 'none';
@@ -7787,8 +7914,46 @@ $TOOL_DEFS = [
       } else if (role === 'tester') {
         if (tabUsers) tabUsers.style.display = 'none';
       }
+
+      if (role === 'admin' && suppAdmin) {
+        suppAdmin.style.display = 'block';
+        loadSupport();
+      }
     }
     enforceRoleUI();
+
+    /* Support Logic */
+    document.getElementById('btn-send-support').addEventListener('click', async () => {
+      const subject = document.getElementById('supp-subject').value;
+      const message = document.getElementById('supp-message').value;
+      const res = await api('save-support', { subject, message });
+      if (res.ok) {
+        alert('Message sent to support!');
+        document.getElementById('supp-subject').value = '';
+        document.getElementById('supp-message').value = '';
+      } else {
+        alert('Error sending message');
+      }
+    });
+
+    async function loadSupport() {
+      const list = document.getElementById('support-list');
+      if (!list) return;
+      const msgs = await api('list-support');
+      list.innerText = ''; // Clear
+      if (msgs.length === 0) {
+        list.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#888;">No messages found.</td></tr>';
+        return;
+      }
+      list.innerHTML = msgs.map(m => `
+            <tr>
+                <td>${m.created_at}</td>
+                <td><strong>${m.user_name}</strong><br><small style="color:#888;">${m.user_email}</small></td>
+                <td>${m.subject}</td>
+                <td>${m.message}</td>
+            </tr>
+        `).join('');
+    }
 
     /* Profile Logic */
     /* Profile Logic */
@@ -7827,8 +7992,24 @@ $TOOL_DEFS = [
 
     document.getElementById('save-profile-btn').addEventListener('click', async () => {
       const name = document.getElementById('prof-name').value;
-      const avatar = document.getElementById('prof-avatar').value;
+      let avatar = document.getElementById('prof-avatar').value;
       const pass = document.getElementById('prof-password').value;
+      const fileInput = document.getElementById('prof-file');
+
+      // Handle File Upload
+      if (fileInput.files.length > 0) {
+        const fd = new FormData();
+        fd.append('avatar', fileInput.files[0]);
+        try {
+          const upRes = await fetch('?api=upload-avatar', { method: 'POST', body: fd });
+          const upJson = await upRes.json();
+          if (upJson.ok) {
+            avatar = upJson.url;
+          } else {
+            alert('Upload failed: ' + upJson.error); return;
+          }
+        } catch (e) { alert('Upload failed'); return; }
+      }
 
       const res = await api('update-profile', { name, avatar_url: avatar, password: pass });
       if (res.ok) {
