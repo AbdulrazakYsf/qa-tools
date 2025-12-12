@@ -7083,33 +7083,48 @@ $TOOL_DEFS = [
 
   <!-- RUN SUMMARY MODAL -->
   <div class="modal-overlay" id="run-summary-modal">
-    <div class="modal-card" style="max-width:500px; max-height:auto;">
-      <div class="modal-header">
-        <h2 id="summary-title" style="margin:0;">Run Complete</h2>
-        <button class="btn-ghost" onclick="closeSummaryModal()" style="font-size:20px; padding:0 10px;">&times;</button>
+    <div class="modal-card"
+      style="max-width:400px; width:100%; border-radius:12px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.2);">
+      <div class="modal-header" style="background:#f8f9fa; border-bottom:1px solid #eee; padding:12px 20px;">
+        <h3 id="summary-title" style="margin:0; font-size:18px; color:#333;">Run Complete</h3>
+        <button class="btn-ghost" onclick="closeSummaryModal()"
+          style="font-size:24px; padding:0; width:30px; height:30px; line-height:30px; border:none;">&times;</button>
       </div>
-      <div class="modal-body" style="text-align:center; padding:20px;">
-        <div id="summary-icon" style="font-size:48px; margin-bottom:10px;"></div>
-        <div class="stat-grid" style="justify-content:center; gap:20px;">
-          <div class="stat-card">
-            <div class="stat-value" id="sum-total">0</div>
-            <div class="stat-label">Total</div>
+      <div class="modal-body" style="padding:24px 20px;">
+
+        <!-- Icon -->
+        <div style="text-align:center; margin-bottom:20px;">
+          <div id="summary-icon" style="font-size:42px;"></div>
+        </div>
+
+        <!-- Stats Grid (2x2) -->
+        <div class="stat-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:20px;">
+          <div class="stat-card" style="background:#f5f7fa; padding:12px; border-radius:8px; text-align:center;">
+            <div class="stat-value" id="sum-total" style="font-size:20px; font-weight:bold; color:#333;">0</div>
+            <div class="stat-label" style="font-size:12px; color:#666; text-transform:uppercase; letter-spacing:0.5px;">
+              Total</div>
           </div>
-          <div class="stat-card">
-            <div class="stat-value" id="sum-passed" style="color:green">0</div>
-            <div class="stat-label">Passed</div>
+          <div class="stat-card" style="background:#e8f5e9; padding:12px; border-radius:8px; text-align:center;">
+            <div class="stat-value" id="sum-passed" style="font-size:20px; font-weight:bold; color:#2e7d32;">0</div>
+            <div class="stat-label"
+              style="font-size:12px; color:#1b5e20; text-transform:uppercase; letter-spacing:0.5px;">Passed</div>
           </div>
-          <div class="stat-card">
-            <div class="stat-value" id="sum-failed" style="color:red">0</div>
-            <div class="stat-label">Failed</div>
+          <div class="stat-card" style="background:#ffebee; padding:12px; border-radius:8px; text-align:center;">
+            <div class="stat-value" id="sum-failed" style="font-size:20px; font-weight:bold; color:#c62828;">0</div>
+            <div class="stat-label"
+              style="font-size:12px; color:#b71c1c; text-transform:uppercase; letter-spacing:0.5px;">Failed</div>
           </div>
-          <div class="stat-card">
-            <div class="stat-value" id="sum-open" style="color:orange">0</div>
-            <div class="stat-label">Open</div>
+          <div class="stat-card" style="background:#fff3e0; padding:12px; border-radius:8px; text-align:center;">
+            <div class="stat-value" id="sum-open" style="font-size:20px; font-weight:bold; color:#ef6c00;">0</div>
+            <div class="stat-label"
+              style="font-size:12px; color:#e65100; text-transform:uppercase; letter-spacing:0.5px;">Open Issues</div>
           </div>
         </div>
-        <div style="margin-top:20px;">
-          <button class="btn-primary" onclick="closeSummaryModal()">Close</button>
+
+        <!-- Action -->
+        <div style="text-align:center;">
+          <button class="btn-primary" onclick="closeSummaryModal()"
+            style="width:100%; border-radius:6px; padding:10px;">Close Summary</button>
         </div>
       </div>
     </div>
