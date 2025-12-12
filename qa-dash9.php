@@ -204,6 +204,21 @@ if (isset($_GET['api'])) {
         echo json_encode($stmt->fetchAll());
         break;
 
+      case 'mark-support-read':
+        require_role(['admin']);
+        if (!empty($input['id'])) {
+          $stmt = $db->prepare("UPDATE qa_support_messages SET is_read=1 WHERE id=?");
+          $stmt->execute([$input['id']]);
+        }
+        echo json_encode(['ok' => true]);
+        break;
+
+      case 'get-unread-support':
+        require_role(['admin']);
+        $stmt = $db->query("SELECT COUNT(*) as count FROM qa_support_messages WHERE is_read=0");
+        echo json_encode($stmt->fetch());
+        break;
+
       case 'get-profile':
         $user = current_user();
         if ($user['id']) {
@@ -5949,21 +5964,26 @@ function qa_db(): PDO
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
-  // Dynamic Migrations (Idempotent)
+  // Dynamic Migrations
   try {
     $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'avatar_url'")->fetchAll();
-    if (count($cols) == 0) {
+    if (count($cols) == 0)
       $pdo->exec("ALTER TABLE qa_users ADD COLUMN avatar_url TEXT AFTER role");
-    }
-  } catch (Exception $e) { /* ignore */
+  } catch (Exception $e) {
   }
 
   try {
     $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'password_hash'")->fetchAll();
-    if (count($cols) == 0) {
+    if (count($cols) == 0)
       $pdo->exec("ALTER TABLE qa_users ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT '' AFTER email");
-    }
-  } catch (Exception $e) { /* ignore */
+  } catch (Exception $e) {
+  }
+
+  try {
+    $cols = $pdo->query("SHOW COLUMNS FROM qa_support_messages LIKE 'is_read'")->fetchAll();
+    if (count($cols) == 0)
+      $pdo->exec("ALTER TABLE qa_support_messages ADD COLUMN is_read TINYINT(1) NOT NULL DEFAULT 0 AFTER message");
+  } catch (Exception $e) {
   }
 
   return $pdo;
@@ -6773,9 +6793,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                  </option>
+                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                    </option>
                 <?php endforeach; ?>
               </select>
             </div>
