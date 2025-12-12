@@ -7791,6 +7791,22 @@ $TOOL_DEFS = [
 
       try {
         logToConsole('Saving Run Report...', 'info');
+        // Flatten results for backend
+        const flatResults = [];
+        allDetails.forEach(d => {
+            if (d.rows && d.rows.length) {
+                d.rows.forEach(r => {
+                    flatResults.push({
+                        tool_code: d.tool_code,
+                        status: r.status,
+                        url: r.url,
+                        parent: r.parent,
+                        payload: r
+                    });
+                });
+            }
+        });
+
         await api('save-run', {
           status: status,
           total_tests: totalTests,
@@ -7798,7 +7814,7 @@ $TOOL_DEFS = [
           failed: totalFailed,
           open_issues: totalOpen,
           notes: notes,
-          details: allDetails
+          results: flatResults
         });
         await Promise.all([loadRuns(), loadStats()]);
         logToConsole('Run Saved Successfully.', 'success');
@@ -8140,7 +8156,7 @@ $TOOL_DEFS = [
     }
 
     document.querySelector('#configs-table').addEventListener('click', async (e) => {
-      const btn = e.target.closest('button'); if (!btn) return;
+      const btn = e.target.closest('button'          ) ; if (!btn) return;
       const tr = btn.closest('tr'); const id = parseInt(tr.dataset.id, 10);
       const cfg = CONFIGS.find(c => c.id == id); if (!cfg) return;
 
