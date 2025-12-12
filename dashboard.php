@@ -268,7 +268,7 @@ if (isset($_GET['api'])) {
           $sql .= " AND r.user_id = ?";
           $params[] = $user['id'];
         }
-        $sql .= " ORDER BY r.created_at DESC LIMIT 50";
+        $sql .= " ORDER BY r.run_date DESC LIMIT 50";
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         echo json_encode($stmt->fetchAll());
@@ -8025,45 +8025,45 @@ $TOOL_DEFS = [
 
           const userFilter = document.getElementById('filter-user-container');
 
-      // Default text
-      if (tabSupport) tabSupport.textContent = 'Support';
+          // Default text
+          if (tabSupport) tabSupport.textContent = 'Support';
 
-      // User Filter Visibility
-      if (role === 'admin' || role === 'viewer') {
-          if(userFilter) userFilter.style.display = 'block';
-      } else {
-          if(userFilter) userFilter.style.display = 'none';
-      }
+          // User Filter Visibility
+          if (role === 'admin' || role === 'viewer') {
+            if (userFilter) userFilter.style.display = 'block';
+          } else {
+            if (userFilter) userFilter.style.display = 'none';
+          }
 
-      if (role === 'viewer') {
-        if (tabConfigs) tabConfigs.style.display = 'none';
-        if (tabUsers) tabUsers.style.display = 'none';
-      } else if (role === 'tester') {
-        if (tabUsers) tabUsers.style.display = 'none';
-      }
+          if (role === 'viewer') {
+            if (tabConfigs) tabConfigs.style.display = 'none';
+            if (tabUsers) tabUsers.style.display = 'none';
+          } else if (role === 'tester') {
+            if (tabUsers) tabUsers.style.display = 'none';
+          }
 
-      if (role === 'admin') {
-        if (contactForm) contactForm.style.display = 'none';
-        if (myTickets) myTickets.style.display = 'none'; // Admin doesn't need personal history here
-        if (suppAdmin) {
-          suppAdmin.style.display = 'block';
-          loadSupport();
-        }
-        if (tabSupport) {
-          tabSupport.textContent = 'Support Center';
-          const c = await api('get-unread-support');
-          if (c && c.count > 0) {
-            tabSupport.innerHTML += ` <span style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:11px;">${c.count}</span>`;
+          if (role === 'admin') {
+            if (contactForm) contactForm.style.display = 'none';
+            if (myTickets) myTickets.style.display = 'none'; // Admin doesn't need personal history here
+            if (suppAdmin) {
+              suppAdmin.style.display = 'block';
+              loadSupport();
+            }
+            if (tabSupport) {
+              tabSupport.textContent = 'Support Center';
+              const c = await api('get-unread-support');
+              if (c && c.count > 0) {
+                tabSupport.innerHTML += ` <span style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:11px;">${c.count}</span>`;
+              }
+            }
+          } else {
+            // Non-admin (User)
+            if (myTickets) {
+              myTickets.style.display = 'block';
+              loadMySupport();
+            }
           }
         }
-      } else {
-        // Non-admin (User)
-        if (myTickets) {
-          myTickets.style.display = 'block';
-          loadMySupport();
-        }
-      }
-    }
         enforceRoleUI();
 
         /* Support Logic */
