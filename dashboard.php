@@ -60,10 +60,33 @@ if (isset($_GET['api'])) {
     switch ($action) {
       /* Configs */
       case 'list-configs':
-        $uid = current_user()['id'];
-        // Prioritize user-specific configs over global ones
-        $stmt = $db->prepare("SELECT * FROM qa_tool_configs WHERE user_id=? OR user_id IS NULL ORDER BY (user_id IS NOT NULL) DESC, created_at DESC");
-        $stmt->execute([$uid]);
+        $user = current_user();
+        $uid = $user['id'];
+        $role = $user['role'];
+
+        $sql = "SELECT c.*, u.name as user_name 
+                FROM qa_tool_configs c 
+                LEFT JOIN qa_users u ON c.user_id = u.id ";
+
+        $params = [];
+        if ($role !== 'admin') {
+          // Testers see: their own configs OR global configs
+          $sql .= " WHERE c.user_id=? OR c.user_id IS NULL ";
+          $params[] = $uid;
+        }
+        // Admin sees ALL (no WHERE clause needed implies all)
+
+        // Order: Own config first (if owner), then Global, then others. 
+        // For admin, maybe just Date DESC? Or maybe group by Tool? 
+        // Let's stick to created_at for Admin, but for tester prioritize their own.
+        if ($role !== 'admin') {
+          $sql .= " ORDER BY (c.user_id IS NOT NULL) DESC, c.created_at DESC";
+        } else {
+          $sql .= " ORDER BY c.tool_code ASC, c.created_at DESC";
+        }
+
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
         echo json_encode($stmt->fetchAll());
         break;
 
@@ -74,7 +97,8 @@ if (isset($_GET['api'])) {
         $config_name = $input['config_name'] ?? '';
         $cfg = $input['config'] ?? [];
         $is_enabled = !empty($input['is_enabled']) ? 1 : 0;
-        $user_id = current_user()['id'];
+        $currentUser = current_user();
+        $currUid = $currentUser['id'];
 
         if (!$tool_code || !$config_name) {
           http_response_code(400);
@@ -82,13 +106,43 @@ if (isset($_GET['api'])) {
           break;
         }
         $cfgJson = json_encode($cfg, JSON_UNESCAPED_UNICODE);
+
         if ($id) {
-          // Update: Enforce user ownership? For now, just update.
-          $stmt = $db->prepare("UPDATE qa_tool_configs SET tool_code=?, config_name=?, config_json=?, is_enabled=?, user_id=? WHERE id=?");
-          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled, $user_id, $id]);
+          // Fetch existing to preserve user_id and check permissions
+          $existing = $db->prepare("SELECT user_id FROM qa_tool_configs WHERE id=?");
+          $existing->execute([$id]);
+          $row = $existing->fetch();
+
+          if (!$row) {
+            echo json_encode(['error' => 'Config not found']);
+            break;
+          }
+
+          $ownerId = $row['user_id'];
+
+          // Permission Check: Admin can edit anyone. Testers only their own.
+          // (Global configs user_id=NULL? If Tester edits Global, do we fork it? 
+          //  For now, assume Global configs are Admin-only to edit, or Testers can edit if they created it?
+          //  Let's allow Admin to edit anything. 
+          //  Testers can only edit if ownerId == currUid.
+
+          if ($currentUser['role'] !== 'admin' && $ownerId != $currUid) {
+            // If trying to edit a Global or another user's config -> Fork it (Create New)?
+            // The UI sends ID if editing. If we want to support "Copy", UI should clear ID.
+            // If user tries to Save an existing config they don't own, block it.
+            http_response_code(403);
+            echo json_encode(['error' => 'Access Denied: You cannot edit this configuration. Clone it instead.']);
+            break;
+          }
+
+          $stmt = $db->prepare("UPDATE qa_tool_configs SET tool_code=?, config_name=?, config_json=?, is_enabled=? WHERE id=?");
+          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled, $id]);
+          // Note: We do NOT update user_id. Ownership stays.
+
         } else {
+          // New Config: Assign to current user
           $stmt = $db->prepare("INSERT INTO qa_tool_configs (tool_code, config_name, config_json, is_enabled, user_id) VALUES (?,?,?,?,?)");
-          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled, $user_id]);
+          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled, $currUid]);
           $id = $db->lastInsertId();
         }
         echo json_encode(['ok' => true, 'id' => $id]);
@@ -6912,9 +6966,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                      <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                        <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                      </option>
+                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                    </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -6947,6 +7001,7 @@ $TOOL_DEFS = [
             <tr>
               <th>#</th>
               <th>Name</th>
+              <th>Owner</th>
               <th>Tool</th>
               <th>Enabled</th>
               <th>Snippet</th>
@@ -7943,6 +7998,9 @@ $TOOL_DEFS = [
     /* Configs */
     async function loadConfigs() {
       CONFIGS = await api('list-configs');
+      const curUser = await api('get-profile'); 
+      const curUid = curUser.id;
+
       const tbody = document.querySelector('#configs-table tbody');
       tbody.innerHTML = '';
       CONFIGS.forEach((cfg, i) => {
@@ -7951,14 +8009,25 @@ $TOOL_DEFS = [
           const json = JSON.parse(cfg.config_json || '{}');
           snippet = (json.inputs || '').toString().slice(0, 60).replace(/\s+/g, ' ');
         } catch (e) { }
+
+        let ownerBadge = '';
+        if(!cfg.user_id) {
+           ownerBadge = '<span class="badge" style="background:#2196f3; color:white;">Global</span>';
+        } else if (cfg.user_id == curUid) {
+           ownerBadge = '<span class="badge" style="background:#4caf50; color:white;">You</span>';
+        } else {
+           ownerBadge = `<span class="badge" style="background:#eee; color:#555;">${cfg.user_name || 'User ' + cfg.user_id}</span>`;
+        }
+
         const tr = document.createElement('tr');
         tr.dataset.id = cfg.id;
         tr.innerHTML = `
       <td>${i + 1}</td>
-      <td>${cfg.config_name}</td>
+      <td><strong>${cfg.config_name}</strong></td>
+      <td>${ownerBadge}</td>
       <td>${cfg.tool_code}</td>
       <td>${cfg.is_enabled ? 'Yes' : 'No'}</td>
-      <td>${snippet}</td>
+      <td class="text-muted" style="font-family:monospace; font-size:12px;">${snippet}</td>
       <td class="table-actions">
         <button data-action="edit">Edit</button>
         <button data-action="delete">Delete</button>
