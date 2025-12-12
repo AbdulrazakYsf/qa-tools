@@ -8,9 +8,11 @@ const QA_DB_NAME_AUTH = 'if0_40372489_init_db';
 const QA_DB_USER_AUTH = 'if0_40372489';
 const QA_DB_PASS_AUTH = 'KmUb1Azwzo';
 
-function get_db_auth() {
+function get_db_auth()
+{
     static $pdo = null;
-    if ($pdo) return $pdo;
+    if ($pdo)
+        return $pdo;
     $dsn = 'mysql:host=' . QA_DB_HOST_AUTH . ';port=' . QA_DB_PORT_AUTH . ';dbname=' . QA_DB_NAME_AUTH . ';charset=utf8mb4';
     $pdo = new PDO($dsn, QA_DB_USER_AUTH, QA_DB_PASS_AUTH);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -18,20 +20,35 @@ function get_db_auth() {
     return $pdo;
 }
 
-function require_login() {
+function require_login()
+{
     if (!isset($_SESSION['user_id'])) {
+        if (isset($_GET['api']) || isset($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+            header('Content-Type: application/json');
+            http_response_code(401);
+            echo json_encode(['error' => 'Session expired. Please login again.']);
+            exit;
+        }
         header('Location: index.php');
         exit;
     }
 }
 
-function require_role($allowed_roles) {
+function require_role($allowed_roles)
+{
     if (!isset($_SESSION['user_role']) || !in_array($_SESSION['user_role'], $allowed_roles)) {
+        if (isset($_GET['api']) || isset($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+            header('Content-Type: application/json');
+            http_response_code(403);
+            echo json_encode(['error' => 'Access Denied: Permission level ' . ($_SESSION['user_role'] ?? 'none') . ' is insufficient.']);
+            exit;
+        }
         die("Access Denied: You do not have the required permissions.");
     }
 }
 
-function current_user() {
+function current_user()
+{
     return [
         'id' => $_SESSION['user_id'] ?? null,
         'name' => $_SESSION['user_name'] ?? null,
