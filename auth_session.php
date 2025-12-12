@@ -75,6 +75,15 @@ function get_db_auth()
     } catch (Exception $e) {
     }
 
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM qa_test_runs LIKE 'user_id'")->fetchAll();
+        if (count($cols) == 0) {
+            $pdo->exec("ALTER TABLE qa_test_runs ADD COLUMN user_id INT UNSIGNED DEFAULT NULL AFTER id");
+            $pdo->exec("CREATE INDEX idx_run_user ON qa_test_runs(user_id)");
+        }
+    } catch (Exception $e) {
+    }
+
     return $pdo;
 }
 
