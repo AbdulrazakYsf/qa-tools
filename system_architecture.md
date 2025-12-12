@@ -1,72 +1,48 @@
-# QA Automation System Architecture
+# QA Automation Dashboard System Architecture
 
 ## Overview
-The system is a centralized dashboard for running various QA automation tools (checkers, scrapers, validators) against the Jarir e-commerce platform. It is built as a hybrid Single Page Application (SPA) where the frontend and backend are largely contained within a single file (`qa-dash3.php`), supported by a MySQL database for persistence.
+The **QA Automation Dashboard** ("QA Tools") is a centralized, web-based platform for executing automation scripts (Checkers, Scrapers, Validators) against the Jarir e-commerce environment. It enables QA testers to run batch validations, manage configurations, and generate reports.
 
-## Core Components
+## Core System Components
 
-### 1. Dashboard (`qa-dash3.php`)
-This is the heart of the application. It serves dual purposes:
-*   **Frontend (HTML/JS)**:
-    *   Displays the main UI with a grid of available tools.
-    *   Manages "Run All" functionality to execute multiple tools in batch.
-    *   Handles User and Configuration management via modal forms.
-    *   Visualizes test run statistics (Charts.js).
-    *   **Tool Execution**: Loads selected tools into an `iframe`. It injects configurations (inputs, logic) into the iframe and extracts results after execution.
-*   **Backend (PHP)**:
-    *   **HTML Hosting**: Serves the main dashboard user interface.
-    *   **Tool Hosting**: Contains a large definition array `$TOOLS_HTML` which holds the complete HTML/JS source for all 13 supported tools.
-    *   **API Endpoint**: Handles AJAX requests via `?api=ACTION` (e.g., `save-run`, `list-configs`).
+### 1. Application Layer (PHP)
+*   **`dashboard.php`** (formerly `qa-dash9.php`): The core "Single File Application".
+    *   **Frontend**: Renders the sophisticated UI (Tabs, Modals, Charts).
+    *   **Backend**: Handles all API requests (`?api=...`) for Runs, Configs, Users, and Support.
+    *   **Tool Engine**: Contains the embedded source code for all 13 automation tools.
+*   **`index.php`**: The entry point. Handles **Login Authentication** and redirects to `dashboard.php`.
+*   **`auth_session.php`**: The shared **Security Kernel**.
+    *   Manages PHP Sessions (`session_start`).
+    *   Provides `get_db_auth()` for centralized PDO Database connections.
+    *   Enforces Access Control (`require_login()`, `require_role()`).
+    *   **Auto-Migration**: Checks and creates missing DB tables/columns on connection.
+*   **`qa_run_report.php`**: Generates standalone, printable HTML reports for test runs.
 
-### 2. Database (MySQL)
-The system connects to a remote MySQL database (`sql309.infinityfree.com`) to store persistent data.
-*   **`qa_tool_configs`**: Stores named configurations for tools (e.g., input URLs, SKUs) so they can be reused.
-*   **`qa_test_runs`**: Records summary data of each test execution (total tests, passed, failed status).
-*   **`qa_run_results`**: Stores detailed per-row results for every test run (JSON payload of the tool output).
-*   **`qa_users`**: Manages authorized users/testers.
+### 2. Database Schema (MySQL)
+The system relies on a relational schema for persistence:
+*   **`qa_users`**: Stores authentication data (`email`, `password_hash`, `role`, `avatar_url`).
+*   **`qa_tool_configs`**: Stores JSON-encoded input configurations for tools.
+*   **`qa_test_runs`**: Stores summary metrics of execution runs.
+*   **`qa_run_results`**: Stores the raw JSON output from tools.
+*   **`qa_support_messages`**: Stores support tickets.
+    *   Columns: `user_id`, `subject`, `message`, `is_read`, `admin_reply`, `reply_at`.
 
-### 3. Reporting (`qa_run_report.php`)
-A dedicated PHP script for generating detailed, printer-friendly reports.
-*   Fetches run data from `qa_test_runs` and `qa_run_results` based on a `run_id`.
-*   Renders a static HTML view of the results, grouped by tool.
+### 3. Support & Reply System
+A fully integrated ticketing system:
+*   **Users**: Can send messages via "Contact Support". View history in "**My Tickets**".
+*   **Admins**: View "Support Center" with **Inbox**. Can reply to messages.
+*   **Notification**: Admins see a "Red Badge" count for unread messages.
 
-### 4. Tools (Embedded)
-There are 13 distinct tools embedded within `qa-dash3.php`. Each is a self-contained HTML/JS "mini-app" that performs a specific testing task.
-*   **List of Tools**:
-    1.  `add_to_cart`: Checks add-to-cart functionality (Guest/Logged-in).
-    2.  `brand`: Validates brand pages.
-    3.  `category`: Checks category pages.
-    4.  `category_filter`: Checks filtered category pages.
-    5.  `cms`: Validates CMS blocks.
-    6.  `getcategories`: Fetches and checks category trees.
-    7.  `images`: Validates image loading on pages.
-    8.  `login`: Tests login flows across different store fronts.
-    9.  `price_checker`: Validates product pricing.
-    10. `products`: General product validation.
-    11. `sku`: Lookup and validation of SKUs.
-    12. `stock`: Checks stock availability status.
-    13. `sub_category`: Validates sub-category navigation.
+### 4. Client-Side Architecture (JS)
+*   **Tools**: Each tool runs in an isolated `iframe`.
+*   **Execution**: The dashboard orchestrates a "Run Loop", injecting configs into iframes and polling for results.
+*   **UI**: Vanilla JS handles all interactivity (Modals, AJAX, Chart.js rendering).
 
-## Execution Flow
-
-1.  **Configuration**: User creates/selects a "Configuration" for a tool (e.g., a list of Production URLs or SKUs).
-2.  **Selection**: User selects one or more tools to run from the Dashboard.
-3.  **Execution Loop**:
-    *   Dashboard iterates through selected tools.
-    *   Builds an `iframe` populated with the tool's HTML (from `$TOOLS_HTML`).
-    *   Injects the selected configuration (inputs) into the tool's DOM.
-    *   Triggers the tool's `run()` function.
-4.  **Result Collection**:
-    *   The tool performs its logic (AJAX calls to Jarir APIs, parsing response).
-    *   The Dashboard polls or waits for the tool to finish.
-    *   Results are scraped from the tool's internal state or DOM.
-5.  **Persistence**:
-    *   Dashboard aggregates results.
-    *   Sends a `save-run` API request to the PHP backend.
-    *   PHP saves the run summary and details to MySQL.
-
-## File Structure
-*   `qa-dash3.php`: Main application (Frontend + Backend + Tools).
-*   `qa_run_report.php`: Reporting viewer.
-*   `qa_bridge.js`: (Implied) Helper script likely used for communication between iframe and dashboard, though logic is mostly handled in `qa-dash3.php`.
-*   `tools/*.html`: Standalone development versions of the tools (contents are copied into `qa-dash3.php`).
+## Deployment & Security
+*   **Host**: InfinityFree (LAMP Stack).
+*   **Deploy**: GitHub Actions via FTP.
+*   **Secrets**: `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD`.
+*   **Security**:
+    *   Passwords hashed via `password_hash()`.
+    *   Role-Based Access Control (Admin vs Tester vs Viewer).
+    *   All DB queries prepared to prevent SQL Injection.

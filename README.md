@@ -13,33 +13,25 @@ A modular, scalable QA testing system for Jarir.com with 13 embedded testing too
 
 ## File Structure
 
+## File Structure
+
 ```
 qa-automation/
-├── qa-dashboard.php       # Main dashboard application
+├── dashboard.php          # Main dashboard application (formerly qa-dash9)
+├── index.php              # Login page & Entry point
+├── auth_session.php       # Authentication & DB Connection
 ├── qa_run_report.php      # Report generator
+├── system_architecture.md # Technical documentation
 ├── README.md              # This file
 └── tools/                 # Individual tool HTML files
-    ├── add_to_cart.html
-    ├── brand.html
-    ├── category.html
-    ├── category_filter.html
-    ├── cms.html
-    ├── getcategories.html
-    ├── images.html
-    ├── login.html
-    ├── price_checker.html
-    ├── products.html
-    ├── sku.html
-    ├── stock.html
-    └── sub_category.html
 ```
 
 ## Installation
 
 1. Upload all files to your web server
-2. Ensure the `tools/` directory is in the same location as `qa-dashboard.php`
-3. Update database credentials in `qa-dashboard.php` if needed
-4. Access `qa-dashboard.php` in your browser
+2. Ensure the `tools/` directory is in the same location as `dashboard.php`
+3. Update database credentials in `auth_session.php` if needed
+4. Access `index.php` in your browser
 
 ## Database Configuration
 

@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['avatar_url'] = $user['avatar_url'] ?? '';
 
             // Redirect based on role or default to dashboard
-            header('Location: qa-dash9.php');
+            header('Location: dashboard.php');
             exit;
         } else {
             $error = 'Invalid email or password.';
