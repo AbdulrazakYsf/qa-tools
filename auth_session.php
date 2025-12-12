@@ -66,6 +66,15 @@ function get_db_auth()
     } catch (Exception $e) {
     }
 
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM qa_support_messages LIKE 'admin_reply'")->fetchAll();
+        if (count($cols) == 0) {
+            $pdo->exec("ALTER TABLE qa_support_messages ADD COLUMN admin_reply TEXT AFTER is_read");
+            $pdo->exec("ALTER TABLE qa_support_messages ADD COLUMN reply_at TIMESTAMP NULL AFTER admin_reply");
+        }
+    } catch (Exception $e) {
+    }
+
     return $pdo;
 }
 

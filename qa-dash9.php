@@ -219,6 +219,28 @@ if (isset($_GET['api'])) {
         echo json_encode($stmt->fetch());
         break;
 
+      case 'reply-support':
+        require_role(['admin']);
+        $id = $input['id'] ?? null;
+        $reply = $input['reply'] ?? '';
+        if (!$id || !$reply) {
+          echo json_encode(['error' => 'Missing ID or Reply']);
+          break;
+        }
+
+        $stmt = $db->prepare("UPDATE qa_support_messages SET admin_reply=?, reply_at=NOW(), is_read=1 WHERE id=?");
+        $stmt->execute([$reply, $id]);
+        echo json_encode(['ok' => true]);
+        break;
+
+      case 'my-support-history':
+        require_login();
+        $uid = current_user()['id'];
+        $stmt = $db->prepare("SELECT * FROM qa_support_messages WHERE user_id=? ORDER BY created_at DESC");
+        $stmt->execute([$uid]);
+        echo json_encode($stmt->fetchAll());
+        break;
+
       case 'get-profile':
         $user = current_user();
         if ($user['id']) {
@@ -6793,9 +6815,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                    </option>
+                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                  </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -6918,46 +6940,55 @@ $TOOL_DEFS = [
 
   <!-- SUPPORT TAB -->
   <section id="tab-support" class="tab-content">
-    <!-- User View: Send Message -->
-    <div class="section-card">
-      <div class="section-header">
-        <h2>Contact Support</h2>
-      </div>
-      <div class="form-grid" style="grid-template-columns: 1fr;">
-        <div class="form-field">
+    <!-- User View: Contact Form & History -->
+    <div id="contact-support-form">
+      <div class="section-card">
+        <div class="section-header">
+          <h2>Contact Support</h2>
+        </div>
+        <div class="form-group">
           <label>Subject</label>
           <input type="text" id="supp-subject" placeholder="Feature Request, Bug Report...">
         </div>
-        <div class="form-field">
+        <div class="form-group">
           <label>Message</label>
-          <textarea id="supp-message"
-            style="width:100%; min-height:100px; padding:10px; border:1px solid #ddd;"></textarea>
+          <textarea id="supp-message" rows="5"></textarea>
         </div>
         <div style="text-align:right;">
           <button class="btn-primary" id="btn-send-support">Send Message</button>
         </div>
       </div>
+
+      <!-- User History Section -->
+      <div class="section-card" id="my-support-tickets" style="margin-top:20px;">
+        <div class="section-header">
+          <h2>My Tickets</h2>
+        </div>
+        <div id="my-support-list">
+          <!-- JS loads history here -->
+        </div>
+      </div>
     </div>
 
-    <!-- Admin View: Inbox (Hidden by default) -->
-    <div class="section-card" id="support-admin-view" style="display:none; margin-top:20px;">
-      <div class="section-header">
-        <h2>Support Inbox (Admin)</h2>
-        <button class="btn-secondary" onclick="loadSupport()">Refresh</button>
+    <!-- Admin View: Inbox -->
+    <div id="support-admin-view" style="display:none;">
+      <div class="section-card">
+        <div class="section-header">
+          <h2>Support Inbox (Admin)</h2>
+          <button class="btn-secondary" onclick="loadSupport()">Refresh</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>User</th>
+              <th>Subject</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="support-list"></tbody>
+        </table>
       </div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>User</th>
-            <th>Subject</th>
-            <th>Message</th>
-          </tr>
-        </thead>
-        <tbody id="support-list">
-          <!-- Rows here -->
-        </tbody>
-      </table>
     </div>
   </section>
 
@@ -7919,8 +7950,7 @@ $TOOL_DEFS = [
       document.getElementById('stat-failed').textContent = s.failed ?? 0;
       document.getElementById('stat-open').textContent = s.open_issues ?? 0;
     }
-
-    function enforceRoleUI() {
+    async function enforceRoleUI() {
       if (typeof CURRENT_USER_ROLE === 'undefined') return;
       const role = CURRENT_USER_ROLE.toLowerCase();
 
@@ -7928,24 +7958,39 @@ $TOOL_DEFS = [
       const tabUsers = document.querySelector('button[data-tab="users"]');
       const tabSupport = document.querySelector('button[data-tab="support"]');
       const suppAdmin = document.getElementById('support-admin-view');
+      const contactForm = document.getElementById('contact-support-form');
+      const myTickets = document.getElementById('my-support-tickets');
 
       // Default text
       if (tabSupport) tabSupport.textContent = 'Support';
 
       if (role === 'viewer') {
-        if (tabConfigs) tabConfigs.style.display = 'non      e';
+        if (tabConfigs) tabConfigs.style.display = 'none';
         if (tabUsers) tabUsers.style.display = 'none';
-        // Viewers CAN see support
       } else if (role === 'tester') {
         if (tabUsers) tabUsers.style.display = 'none';
       }
 
       if (role === 'admin') {
+        if (contactForm) contactForm.style.display = 'none';
+        if (myTickets) myTickets.style.display = 'none'; // Admin doesn't need personal history here
         if (suppAdmin) {
           suppAdmin.style.display = 'block';
           loadSupport();
         }
-        if (tabSupport) tabSupport.textContent = 'Support Center';
+        if (tabSupport) {
+          tabSupport.textContent = 'Support Center';
+          const c = await api('get-unread-support');
+          if (c && c.count > 0) {
+            tabSupport.innerHTML += ` <span style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:11px;">${c.count}</span>`;
+          }
+        }
+      } else {
+        // Non-admin (User)
+        if (myTickets) {
+          myTickets.style.display = 'block';
+          loadMySupport();
+        }
       }
     }
     enforceRoleUI();
@@ -7959,6 +8004,7 @@ $TOOL_DEFS = [
         alert('Message sent to support!');
         document.getElementById('supp-subject').value = '';
         document.getElementById('supp-message').value = '';
+        loadMySupport(); // Refresh list
       } else {
         alert('Error sending message');
       }
@@ -7968,22 +8014,88 @@ $TOOL_DEFS = [
       const list = document.getElementById('support-list');
       if (!list) return;
       const msgs = await api('list-support');
-      list.innerText = ''; // Clear
+      list.innerText = '';
       if (msgs.length === 0) {
         list.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#888;">No messages found.</td></tr>';
         return;
       }
-      list.innerHTML = msgs.map(m => `
-            <tr>
+      list.innerHTML = msgs.map(m => {
+        const isUnread = m.is_read == 0;
+        const style = isUnread ? 'font-weight:bold; background:#f0f8ff;' : '';
+        const replyStatus = m.admin_reply ? '<span style="color:green; font-weight:bold;">Replied</span>' : '<span style="color:orange;">Pending</span>';
+        return `
+            <tr style="${style} cursor:pointer;" onclick="toggleReplyRow(${m.id}, this)">
                 <td>${m.created_at}</td>
                 <td><strong>${m.user_name}</strong><br><small style="color:#888;">${m.user_email}</small></td>
                 <td>${m.subject}</td>
-                <td>${m.message}</td>
+                <td>${replyStatus}</td>
             </tr>
-        `).join('');
+            <tr id="reply-row-${m.id}" style="display:none; background:#f9f9f9;">
+                <td colspan="4" style="padding:15px;">
+                    <p><strong>Message:</strong> ${m.message}</p>
+                    <hr style="margin:10px 0; border:0; border-top:1px solid #ddd;">
+                    ${m.admin_reply ?
+            `<div style="background:#e8f5e9; padding:10px; border-radius:4px; margin-bottom:10px;">
+                            <strong>Admin Reply (${m.reply_at}):</strong><br>${m.admin_reply}
+                         </div>` :
+            `<div style="margin-bottom:10px;">
+                            <textarea id="reply-text-${m.id}" style="width:100%; height:80px; padding:8px;" placeholder="Type reply..."></textarea>
+                            <button onclick="sendReply(${m.id})" class="btn-primary" style="margin-top:5px; padding:4px 10px; font-size:12px;">Send Reply</button>
+                         </div>`
+          }
+                </td>
+            </tr>
+        `}).join('');
     }
 
-    /* Profile Logic */
+    function toggleReplyRow(id, row) {
+      // Mark read if bold
+      if (row.style.fontWeight.includes('bold') || row.style.fontWeight === 'bold') {
+        api('mark-support-read', { id });
+        row.style.fontWeight = 'normal';
+        row.style.background = 'transparent';
+      }
+      const r = document.getElementById(`reply-row-${id}`);
+      r.style.display = r.style.display === 'none' ? 'table-row' : 'none';
+    }
+
+    async function sendReply(id) {
+      const txt = document.getElementById(`reply-text-${id}`).value;
+      if (!txt) return alert('Enter reply');
+      const res = await api('reply-support', { id, reply: txt });
+      if (res.ok) {
+        alert('Replied!');
+        loadSupport();
+      } else {
+        alert('Error replying');
+      }
+    }
+
+    async function loadMySupport() {
+      const list = document.getElementById('my-support-list');
+      if (!list) return; // Might not exist yet in HTML
+      const msgs = await api('my-support-history');
+      list.innerHTML = '';
+      if (msgs.length === 0) {
+        list.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">No tickets yet.</div>';
+        return;
+      }
+      list.innerHTML = msgs.map(m => `
+            <div style="border:1px solid #eee; padding:10px; margin-bottom:10px; border-radius:4px; background:white;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                   <strong>${m.subject}</strong>
+                   <span style="font-size:12px; color:#888;">${m.created_at}</span>
+                </div>
+                <div style="margin-bottom:5px; color:#555;">${m.message}</div>
+                ${m.admin_reply ?
+          `<div style="background:#f1f8e9; padding:8px; border-radius:4px; margin-top:5px; font-size:13px; border-left:3px solid #4caf50;">
+                        <strong>Admin Reply:</strong> ${m.admin_reply}
+                     </div>`
+          : '<div style="font-size:12px; color:orange; margin-top:5px;">Awaiting Reply...</div>'
+        }
+            </div>
+        `).join('');
+    }
     /* Profile Logic */
     const profileModal = document.getElementById('profile-modal');
     const profileDropdown = document.getElementById('profile-dropdown');
