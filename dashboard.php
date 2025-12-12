@@ -6824,8 +6824,16 @@ $TOOL_DEFS = [
 
       <div class="section-card charts-section">
         <div class="section-header">
-          <h2>Run Insights</h2>
-          <small>Overview of all saved test runs</small>
+          <div>
+            <h2>Run Insights</h2>
+            <small>Overview of all saved test runs</small>
+          </div>
+          <!-- User Filter (Global) -->
+          <div class="filter-group" id="filter-user-container" style="display:none; margin-bottom:0;">
+            <select id="filter-user" class="form-control" style="width:160px;">
+              <option value="">All Users</option>
+            </select>
+          </div>
         </div>
         <div class="charts-grid">
           <div class="chart-card">
@@ -6919,13 +6927,7 @@ $TOOL_DEFS = [
               <!-- Populated by JS -->
             </select>
           </div>
-          <!-- User Filter (Visible for Admins/Viewers) -->
-          <div class="filter-group" id="filter-user-container" style="display:none;">
-            <label>Filter by User</label>
-            <select id="filter-user" class="form-control" style="width:140px;">
-              <option value="">All Users</option>
-            </select>
-          </div>
+
           <div style="flex:1;"></div>
           <div style="display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px;">
             <div style="font-size:13px; color:#555; font-weight:600; margin-right:8px;">Total Runs: <span
@@ -7893,7 +7895,7 @@ $TOOL_DEFS = [
         if (st && (r.status || '').toLowerCase() !== st) return false;
         // Tool filter
         if (tc) {
-          const runTools = (r.tools || '').split(',');
+          const runTools = (r.tools || '').split(',').map(t => t.trim());
           if (!runTools.includes(tc)) return false;
         }
         // User Filter (Client side for the loaded batch)
@@ -8147,7 +8149,7 @@ $TOOL_DEFS = [
         document.getElementById('cfg-name').value = cfg.config_name;
         document.getElementById('cfg-tool-code').value = cfg.tool_code;
         document.getElementById('cfg-enabled').checked = !!cfg.is_enabled;
-        let inputs = '';
+        let inputs              = '';
         try {
           const json = JSON.parse(cfg.config_json || '{}');
           inputs = json.inputs || '';
