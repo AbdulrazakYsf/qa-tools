@@ -7648,7 +7648,8 @@ $TOOL_DEFS = [
           list.forEach(r => {
             const tr = document.createElement('tr');
             tr.dataset.id = r.id;
-            // Show tools mini badges let toolBadges = '';
+            // Show tools mini badges
+            let toolBadges = '';
             if (r.tools) {
               const tCodes = r.tools.split(',');
               if (tCodes.length > 3) toolBadges = `<span class="badge" style="background:#eee;color:#555">${tCodes.length} tools</span>`;
