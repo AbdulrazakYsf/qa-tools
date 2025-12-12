@@ -4,6 +4,195 @@ ini_set('display_errors', 1);
 require_once 'auth_session.php';
 require_login();
 $currentUser = current_user();
+
+/********************
+ * 1. API HANDLING (Must be before any HTML)
+ ********************/
+if (isset($_GET['api'])) {
+  // Clean buffer just in case
+  while (ob_get_level())
+    ob_end_clean();
+  header('Content-Type: application/json; charset=utf-8');
+
+  $action = $_GET['api'];
+  $db = get_db_auth(); // Use auth_session connection
+  $input = json_decode(file_get_contents('php://input'), true) ?? [];
+
+  try {
+    switch ($action) {
+      /* Configs */
+      case 'list-configs':
+        $stmt = $db->query("SELECT * FROM qa_tool_configs ORDER BY created_at DESC");
+        echo json_encode($stmt->fetchAll());
+        break;
+
+      case 'save-config':
+        require_role(['admin', 'tester']);
+        $id = $input['id'] ?? null;
+        $tool_code = $input['tool_code'] ?? '';
+        $config_name = $input['config_name'] ?? '';
+        $cfg = $input['config'] ?? [];
+        $is_enabled = !empty($input['is_enabled']) ? 1 : 0;
+
+        if (!$tool_code || !$config_name) {
+          http_response_code(400);
+          echo json_encode(['error' => 'Missing tool_code or config_name']);
+          break;
+        }
+        $cfgJson = json_encode($cfg, JSON_UNESCAPED_UNICODE);
+        if ($id) {
+          $stmt = $db->prepare("UPDATE qa_tool_configs SET tool_code=?, config_name=?, config_json=?, is_enabled=? WHERE id=?");
+          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled, $id]);
+        } else {
+          $stmt = $db->prepare("INSERT INTO qa_tool_configs (tool_code, config_name, config_json, is_enabled) VALUES (?,?,?,?)");
+          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled]);
+          $id = $db->lastInsertId();
+        }
+        echo json_encode(['ok' => true, 'id' => $id]);
+        break;
+
+      case 'delete-config':
+        require_role(['admin', 'tester']);
+        if (!empty($input['id'])) {
+          $stmt = $db->prepare("DELETE FROM qa_tool_configs WHERE id=?");
+          $stmt->execute([$input['id']]);
+        }
+        echo json_encode(['ok' => true]);
+        break;
+
+      /* Users */
+      case 'list-users':
+        $stmt = $db->query("SELECT * FROM qa_users ORDER BY created_at DESC");
+        echo json_encode($stmt->fetchAll());
+        break;
+
+      case 'save-user':
+        require_role(['admin']);
+        $id = $input['id'] ?? null;
+        $name = $input['name'] ?? '';
+        $email = $input['email'] ?? '';
+        $password = $input['password'] ?? '';
+        $role = $input['role'] ?? 'tester';
+        $is_active = !empty($input['is_active']) ? 1 : 0;
+
+        if (!$name || !$email) {
+          http_response_code(400);
+          echo json_encode(['error' => 'Missing name or email']);
+          break;
+        }
+        if ($id) {
+          if ($password) {
+            $hash = password_hash($password, PASSWORD_DEFAULT);
+            $stmt = $db->prepare("UPDATE qa_users SET name=?, email=?, password_hash=?, role=?, is_active=? WHERE id=?");
+            $stmt->execute([$name, $email, $hash, $role, $is_active, $id]);
+          } else {
+            $stmt = $db->prepare("UPDATE qa_users SET name=?, email=?, role=?, is_active=? WHERE id=?");
+            $stmt->execute([$name, $email, $role, $is_active, $id]);
+          }
+        } else {
+          $hash = password_hash($password, PASSWORD_DEFAULT);
+          $stmt = $db->prepare("INSERT INTO qa_users (name, email, password_hash, role, is_active) VALUES (?,?,?,?,?)");
+          $stmt->execute([$name, $email, $hash, $role, $is_active]);
+          $id = $db->lastInsertId();
+        }
+        echo json_encode(['ok' => true, 'id' => $id]);
+        break;
+
+      case 'delete-user':
+        require_role(['admin']);
+        if (!empty($input['id'])) {
+          $stmt = $db->prepare("DELETE FROM qa_users WHERE id=?");
+          $stmt->execute([$input['id']]);
+        }
+        echo json_encode(['ok' => true]);
+        break;
+
+      /* Runs */
+      case 'list-runs':
+        $sql = "SELECT tr.*, GROUP_CONCAT(DISTINCT rr.tool_code) as tools FROM qa_test_runs tr LEFT JOIN qa_run_results rr ON tr.id = rr.run_id GROUP BY tr.id ORDER BY tr.run_date DESC LIMIT 100";
+        $stmt = $db->query($sql);
+        echo json_encode($stmt->fetchAll());
+        break;
+
+      case 'run-details':
+        $runId = $input['id'] ?? null;
+        if (!$runId) {
+          echo json_encode([]);
+          break;
+        }
+        $stmt = $db->prepare("SELECT tool_code, status, url, parent, payload, created_at FROM qa_run_results WHERE run_id=? ORDER BY tool_code, status, url");
+        $stmt->execute([$runId]);
+        echo json_encode($stmt->fetchAll());
+        break;
+
+      case 'save-run':
+        require_role(['admin', 'tester']);
+        $id = $input['id'] ?? null;
+        $status = $input['status'] ?? 'completed';
+        $total = (int) ($input['total_tests'] ?? 0);
+        $passed = (int) ($input['passed'] ?? 0);
+        $failed = (int) ($input['failed'] ?? 0);
+        $open = (int) ($input['open_issues'] ?? 0);
+        $notes = $input['notes'] ?? '';
+        $details = $input['details'] ?? null;
+
+        if ($id) {
+          $stmt = $db->prepare("UPDATE qa_test_runs SET status=?, total_tests=?, passed=?, failed=?, open_issues=?, notes=? WHERE id=?");
+          $stmt->execute([$status, $total, $passed, $failed, $open, $notes, $id]);
+          if (is_array($details)) {
+            $db->prepare("DELETE FROM qa_run_results WHERE run_id=?")->execute([$id]);
+          }
+        } else {
+          $stmt = $db->prepare("INSERT INTO qa_test_runs (status, total_tests, passed, failed, open_issues, notes) VALUES (?,?,?,?,?,?)");
+          $stmt->execute([$status, $total, $passed, $failed, $open, $notes]);
+          $id = $db->lastInsertId();
+        }
+
+        if (is_array($details)) {
+          $ins = $db->prepare("INSERT INTO qa_run_results (run_id, tool_code, status, url, parent, payload) VALUES (?,?,?,?,?,?)");
+          foreach ($details as $toolBlock) {
+            if (empty($toolBlock['tool_code']) || empty($toolBlock['rows']) || !is_array($toolBlock['rows']))
+              continue;
+            $toolCode = $toolBlock['tool_code'];
+            foreach ($toolBlock['rows'] as $row) {
+              $st = $row['status'] ?? '';
+              $url = $row['url'] ?? '';
+              $par = $row['parent'] ?? '';
+              $raw = isset($row['payload']) ? $row['payload'] : json_encode($row);
+              $ins->execute([$id, $toolCode, $st, $url, $par, $raw]);
+            }
+          }
+        }
+        echo json_encode(['ok' => true, 'id' => $id]);
+        break;
+
+      case 'delete-run':
+        require_role(['admin', 'tester']);
+        if (!empty($input['id'])) {
+          $db->prepare("DELETE FROM qa_run_results WHERE run_id=?")->execute([$input['id']]);
+          $db->prepare("DELETE FROM qa_test_runs WHERE id=?")->execute([$input['id']]);
+        }
+        echo json_encode(['ok' => true]);
+        break;
+
+      case 'stats':
+        $total = (int) $db->query("SELECT COUNT(*) AS c FROM qa_test_runs")->fetch()['c'];
+        $passed = (int) $db->query("SELECT COUNT(*) AS c FROM qa_test_runs WHERE status='passed'")->fetch()['c'];
+        $failed = (int) $db->query("SELECT COUNT(*) AS c FROM qa_test_runs WHERE status='failed'")->fetch()['c'];
+        $open = (int) $db->query("SELECT COALESCE(SUM(open_issues),0) AS s FROM qa_test_runs")->fetch()['s'];
+        echo json_encode(['total_runs' => $total, 'passed' => $passed, 'failed' => $failed, 'open_issues' => $open]);
+        break;
+
+      default:
+        http_response_code(404);
+        echo json_encode(['error' => 'Unknown api']);
+    }
+  } catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode(['error' => $e->getMessage()]);
+  }
+  exit;
+}
 ?>
 <script>
   const CURRENT_USER_ROLE = '<?php echo htmlspecialchars($currentUser['role'] ?? 'viewer'); ?>';
@@ -5643,227 +5832,7 @@ function qa_db(): PDO
   return $pdo;
 }
 
-/********************
- * 2. SIMPLE JSON API
- ********************/
 
-if (isset($_GET['api'])) {
-  header('Content-Type: application/json; charset=utf-8');
-  $action = $_GET['api'];
-  $db = qa_db();
-  $input = json_decode(file_get_contents('php://input'), true) ?? [];
-
-  try {
-    switch ($action) {
-      /* Configs */
-      case 'list-configs':
-        $stmt = $db->query("SELECT * FROM qa_tool_configs ORDER BY created_at DESC");
-        echo json_encode($stmt->fetchAll());
-        break;
-
-      case 'save-config':
-        require_role(['admin', 'tester']);
-        $id = $input['id'] ?? null;
-        $tool_code = $input['tool_code'] ?? '';
-        $config_name = $input['config_name'] ?? '';
-        $cfg = $input['config'] ?? [];
-        $is_enabled = !empty($input['is_enabled']) ? 1 : 0;
-
-        if (!$tool_code || !$config_name) {
-          http_response_code(400);
-          echo json_encode(['error' => 'Missing tool_code or config_name']);
-          break;
-        }
-
-        $cfgJson = json_encode($cfg, JSON_UNESCAPED_UNICODE);
-
-        if ($id) {
-          $stmt = $db->prepare("
-                        UPDATE qa_tool_configs
-                           SET tool_code=?, config_name=?, config_json=?, is_enabled=?
-                         WHERE id=?
-                    ");
-          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled, $id]);
-        } else {
-          $stmt = $db->prepare("
-                        INSERT INTO qa_tool_configs (tool_code, config_name, config_json, is_enabled)
-                        VALUES (?,?,?,?)
-                    ");
-          $stmt->execute([$tool_code, $config_name, $cfgJson, $is_enabled]);
-          $id = $db->lastInsertId();
-        }
-        echo json_encode(['ok' => true, 'id' => $id]);
-        break;
-
-      case 'delete-config':
-        require_role(['admin', 'tester']);
-        if (!empty($input['id'])) {
-          $stmt = $db->prepare("DELETE FROM qa_tool_configs WHERE id=?");
-          $stmt->execute([$input['id']]);
-        }
-        echo json_encode(['ok' => true]);
-        break;
-
-      /* Users */
-      case 'list-users':
-        $stmt = $db->query("SELECT * FROM qa_users ORDER BY created_at DESC");
-        echo json_encode($stmt->fetchAll());
-        break;
-
-      case 'save-user':
-        require_role(['admin']);
-        $id = $input['id'] ?? null;
-        $name = $input['name'] ?? '';
-        $email = $input['email'] ?? '';
-        $password = $input['password'] ?? '';
-        $role = $input['role'] ?? 'tester';
-        $is_active = !empty($input['is_active']) ? 1 : 0;
-
-        if (!$name || !$email) {
-          http_response_code(400);
-          echo json_encode(['error' => 'Missing name or email']);
-          break;
-        }
-
-        if ($id) {
-          if ($password) {
-            $hash = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $db->prepare("UPDATE qa_users SET name=?, email=?, password_hash=?, role=?, is_active=? WHERE id=?");
-            $stmt->execute([$name, $email, $hash, $role, $is_active, $id]);
-          } else {
-            $stmt = $db->prepare("UPDATE qa_users SET name=?, email=?, role=?, is_active=? WHERE id=?");
-            $stmt->execute([$name, $email, $role, $is_active, $id]);
-          }
-        } else {
-          $hash = password_hash($password, PASSWORD_DEFAULT);
-          $stmt = $db->prepare("INSERT INTO qa_users (name, email, password_hash, role, is_active) VALUES (?,?,?,?,?)");
-          $stmt->execute([$name, $email, $hash, $role, $is_active]);
-          $id = $db->lastInsertId();
-        }
-        echo json_encode(['ok' => true, 'id' => $id]);
-        break;
-
-      case 'delete-user':
-        require_role(['admin']);
-        if (!empty($input['id'])) {
-          $stmt = $db->prepare("DELETE FROM qa_users WHERE id=?");
-          $stmt->execute([$input['id']]);
-        }
-        echo json_encode(['ok' => true]);
-        break;
-
-      /* Test runs â€“ manual logging only (no wiring to tools) */
-      case 'list-runs':
-        $sql = "SELECT tr.*, GROUP_CONCAT(DISTINCT rr.tool_code) as tools 
-                        FROM qa_test_runs tr 
-                        LEFT JOIN qa_run_results rr ON tr.id = rr.run_id 
-                        GROUP BY tr.id 
-                        ORDER BY tr.run_date DESC LIMIT 100";
-        $stmt = $db->query($sql);
-        echo json_encode($stmt->fetchAll());
-        break;
-
-      case 'run-details':
-        $runId = $input['id'] ?? null;
-        if (!$runId) {
-          echo json_encode([]);
-          break;
-        }
-        $stmt = $db->prepare("SELECT tool_code, status, url, parent, payload, created_at FROM qa_run_results WHERE run_id=? ORDER BY tool_code, status, url");
-        $stmt->execute([$runId]);
-        echo json_encode($stmt->fetchAll());
-        break;
-
-      case 'save-run':
-        require_role(['admin', 'tester']);
-        $id = $input['id'] ?? null;
-        $status = $input['status'] ?? 'completed';
-        $total = (int) ($input['total_tests'] ?? 0);
-        $passed = (int) ($input['passed'] ?? 0);
-        $failed = (int) ($input['failed'] ?? 0);
-        $open = (int) ($input['open_issues'] ?? 0);
-        $notes = $input['notes'] ?? '';
-        $details = $input['details'] ?? null;
-
-        if ($id) {
-          $stmt = $db->prepare("
-                        UPDATE qa_test_runs
-                           SET status=?, total_tests=?, passed=?, failed=?, open_issues=?, notes=?
-                         WHERE id=?
-                    ");
-          $stmt->execute([$status, $total, $passed, $failed, $open, $notes, $id]);
-
-          if (is_array($details)) {
-            $del = $db->prepare("DELETE FROM qa_run_results WHERE run_id=?");
-            $del->execute([$id]);
-          }
-        } else {
-          $stmt = $db->prepare("
-                        INSERT INTO qa_test_runs (status, total_tests, passed, failed, open_issues, notes)
-                        VALUES (?,?,?,?,?,?)
-                    ");
-          $stmt->execute([$status, $total, $passed, $failed, $open, $notes]);
-          $id = $db->lastInsertId();
-        }
-
-        if (is_array($details)) {
-          $ins = $db->prepare("
-                        INSERT INTO qa_run_results (run_id, tool_code, status, url, parent, payload)
-                        VALUES (?,?,?,?,?,?)
-                    ");
-          foreach ($details as $toolBlock) {
-            if (empty($toolBlock['tool_code']) || empty($toolBlock['rows']) || !is_array($toolBlock['rows'])) {
-              continue;
-            }
-            $toolCode = $toolBlock['tool_code'];
-            foreach ($toolBlock['rows'] as $row) {
-              $st = $row['status'] ?? '';
-              $url = $row['url'] ?? '';
-              $par = $row['parent'] ?? '';
-              $raw = isset($row['payload']) ? $row['payload'] : json_encode($row);
-              $ins->execute([$id, $toolCode, $st, $url, $par, $raw]);
-            }
-          }
-        }
-
-        echo json_encode(['ok' => true, 'id' => $id]);
-        break;
-
-      case 'delete-run':
-        require_role(['admin', 'tester']);
-        if (!empty($input['id'])) {
-          $stmt = $db->prepare("DELETE FROM qa_run_results WHERE run_id=?");
-          $stmt->execute([$input['id']]);
-          $stmt = $db->prepare("DELETE FROM qa_test_runs WHERE id=?");
-          $stmt->execute([$input['id']]);
-        }
-        echo json_encode(['ok' => true]);
-        break;
-
-
-      case 'stats':
-        $total = (int) $db->query("SELECT COUNT(*) AS c FROM qa_test_runs")->fetch()['c'];
-        $passed = (int) $db->query("SELECT COUNT(*) AS c FROM qa_test_runs WHERE status='passed'")->fetch()['c'];
-        $failed = (int) $db->query("SELECT COUNT(*) AS c FROM qa_test_runs WHERE status='failed'")->fetch()['c'];
-        $open = (int) $db->query("SELECT COALESCE(SUM(open_issues),0) AS s FROM qa_test_runs")->fetch()['s'];
-        echo json_encode([
-          'total_runs' => $total,
-          'passed' => $passed,
-          'failed' => $failed,
-          'open_issues' => $open,
-        ]);
-        break;
-
-      default:
-        http_response_code(404);
-        echo json_encode(['error' => 'Unknown api']);
-    }
-  } catch (Throwable $e) {
-    http_response_code(500);
-    echo json_encode(['error' => $e->getMessage()]);
-  }
-  exit;
-}
 
 /********************
  * 3. PAGE RENDERING
