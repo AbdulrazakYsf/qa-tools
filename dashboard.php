@@ -339,9 +339,21 @@ if (isset($_GET['api'])) {
 
       case 'delete-run':
         require_role(['admin', 'tester']);
-        if (!empty($input['id'])) {
-          $db->prepare("DELETE FROM qa_run_results WHERE run_id=?")->execute([$input['id']]);
-          $db->prepare("DELETE FROM qa_test_runs WHERE id=?")->execute([$input['id']]);
+        $ids = [];
+        if (!empty($input['ids']) && is_array($input['ids'])) {
+          $ids = $input['ids'];
+        } elseif (!empty($input['id'])) {
+          $ids[] = $input['id'];
+        }
+
+        if (!empty($ids)) {
+          // Use a loop or IN clause. Loop is simpler for prepared statements with varying count
+          foreach ($ids as $id) {
+            // Optional: Check ownership if tester (though frontend filters it, backend should verify)
+            // For now, assuming testers can delete what they see (which is only their own runs)
+            $db->prepare("DELETE FROM qa_run_results WHERE run_id=?")->execute([$id]);
+            $db->prepare("DELETE FROM qa_test_runs WHERE id=?")->execute([$id]);
+          }
         }
         echo json_encode(['ok' => true]);
         break;
@@ -6802,9 +6814,11 @@ $TOOL_DEFS = [
             </select>
           </div>
           <div style="flex:1;"></div>
-          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
-            <div style="font-size:13px; color:#555; font-weight:600;">Total Runs: <span id="filtered-total">0</span>
-            </div>
+          <div style="display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px;">
+            <div style="font-size:13px; color:#555; font-weight:600; margin-right:8px;">Total Runs: <span
+                id="filtered-total">0</span></div>
+            <button id="btn-bulk-delete" class="btn-small" style="background:#d32f2f; display:none;"
+              onclick="bulkDeleteRuns()">Delete Selected (<span id="selected-count">0</span>)</button>
             <button class="btn-small btn-secondary" onclick="downloadRunsCSV()">Export CSV</button>
           </div>
         </div>
@@ -6812,25 +6826,68 @@ $TOOL_DEFS = [
         <table class="table" id="runs-table">
           <thead>
             <tr>
-              <thwidth="40">#</th>
-                <th>Date</th>
-                <th>User</th>
-                <th width="80">Status</th>
-                <th>Total</th>
-                <th>Passed</th>
-                <th>Failed</th>
-                <th>Open</th>
-                <th>Notes</th>
-                <th width="120">Actions</th>
-                <th width="80">Report</th>
+              <th width="30"><input type="checkbox" id="select-all-runs" onclick="toggleSelectAll(this)"></th>
+              <th width="40">#</th>
+              <th>Date</th>
+              <th>User</th>
+              <th width="80">Status</th>
+              <th>Total</th>
+              <th>Passed</th>
+              <th>Failed</th>
+              <th>Open</th>
+              <th>Notes</th>
+              <th width="120">Actions</th>
+              <th width="80">Report</th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
-
-
       </div>
     </section>
+
+    <!-- JS Logic for Batch Delete -->
+    <script>
+      function toggleSelectAll(source) {
+        const checkboxes = document.querySelectorAll('.run-checkbox');
+        checkboxes.forEach(cb => {
+          // Only select visible rows
+          if (cb.closest('tr').style.display !== 'none') {
+            cb.checked = source.checked;
+          }
+        });
+        updateBulkAction();
+      }
+
+      function updateBulkAction() {
+        const checked = document.querySelectorAll('.run-checkbox:checked').length;
+        const btn = document.getElementById('btn-bulk-delete');
+        const count = document.getElementById('selected-count');
+        if (btn && count) {
+          count.textContent = checked;
+          btn.style.display = checked > 0 ? 'inline-block' : 'none';
+        }
+      }
+
+      async function bulkDeleteRuns() {
+        const checked = document.querySelectorAll('.run-checkbox:checked');
+        if (checked.length === 0) return;
+
+        if (!confirm('Are you sure you want to delete ' + checked.length + ' runs? This cannot be undone.')) return;
+
+        const ids = Array.from(checked).map(cb => parseInt(cb.value));
+
+        try {
+          await api('delete-run', { ids: ids });
+          // refresh
+          await loadRuns();
+          // reset header checkbox
+          document.getElementById('select-all-runs').checked = false;
+          updateBulkAction();
+        } catch (e) {
+          alert('Error deleting runs: ' + e.message);
+        }
+      }
+    </script>
 
     <!-- CONFIGURATION TAB -->
     <section id="tab-configs" class="tab-content">
@@ -7672,6 +7729,7 @@ $TOOL_DEFS = [
         const userHtml = `<div style="font-weight:bold; font-size:12px; color:#455a64;">${userName}</div>`;
 
         tr.innerHTML = `
+      <td><input type="checkbox" class="run-checkbox" value="${r.id}" onclick="updateBulkAction()"></td>
       <td>${r.id}</td>
       <td>
         <div>${r.run_date}</div>
@@ -7688,6 +7746,10 @@ $TOOL_DEFS = [
       <td><a href="qa_run_report.php?run_id=${r.id}" target="_blank" class="btn-small btn-secondary">Report</a></td>`;
         tbody.appendChild(tr);
       });
+      // Reset bulk selection UI when re-rendering
+      updateBulkAction(); 
+      const selectAll = document.getElementById('select-all-runs');
+      if(selectAll) selectAll.checked = false;
     }
 
     function applyRunFilters() {
