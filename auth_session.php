@@ -17,6 +17,55 @@ function get_db_auth()
     $pdo = new PDO($dsn, QA_DB_USER_AUTH, QA_DB_PASS_AUTH);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+
+    // Ensure tables exist (Shared Schema Definition)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS qa_users (
+          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+          name VARCHAR(191) NOT NULL,
+          email VARCHAR(191) NOT NULL,
+          password_hash VARCHAR(255) NOT NULL DEFAULT '',
+          role VARCHAR(32) NOT NULL DEFAULT 'tester',
+          avatar_url TEXT,
+          is_active TINYINT(1) NOT NULL DEFAULT 1,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS qa_support_messages (
+          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+          user_id INT UNSIGNED NOT NULL,
+          subject VARCHAR(191),
+          message TEXT,
+          is_read TINYINT(1) NOT NULL DEFAULT 0,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_support_user (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    // Dynamic Migrations (Idempotent)
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'avatar_url'")->fetchAll();
+        if (count($cols) == 0)
+            $pdo->exec("ALTER TABLE qa_users ADD COLUMN avatar_url TEXT AFTER role");
+    } catch (Exception $e) {
+    }
+
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'password_hash'")->fetchAll();
+        if (count($cols) == 0)
+            $pdo->exec("ALTER TABLE qa_users ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT '' AFTER email");
+    } catch (Exception $e) {
+    }
+
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM qa_support_messages LIKE 'is_read'")->fetchAll();
+        if (count($cols) == 0)
+            $pdo->exec("ALTER TABLE qa_support_messages ADD COLUMN is_read TINYINT(1) NOT NULL DEFAULT 0 AFTER message");
+    } catch (Exception $e) {
+    }
+
     return $pdo;
 }
 
