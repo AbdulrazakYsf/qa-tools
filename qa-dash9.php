@@ -7906,18 +7906,26 @@ $TOOL_DEFS = [
 
       const tabConfigs = document.querySelector('button[data-tab="configs"]');
       const tabUsers = document.querySelector('button[data-tab="users"]');
+      const tabSupport = document.querySelector('button[data-tab="support"]');
       const suppAdmin = document.getElementById('support-admin-view');
 
+      // Default text
+      if (tabSupport) tabSupport.textContent = 'Support';
+
       if (role === 'viewer') {
-        if (tabConfigs) tabConfigs.style.display = 'none';
+        if (tabConfigs) tabConfigs.style.display = 'non      e';
         if (tabUsers) tabUsers.style.display = 'none';
+        // Viewers CAN see support
       } else if (role === 'tester') {
         if (tabUsers) tabUsers.style.display = 'none';
       }
 
-      if (role === 'admin' && suppAdmin) {
-        suppAdmin.style.display = 'block';
-        loadSupport();
+      if (role === 'admin') {
+        if (suppAdmin) {
+          suppAdmin.style.display = 'block';
+          loadSupport();
+        }
+        if (tabSupport) tabSupport.textContent = 'Support Center';
       }
     }
     enforceRoleUI();
@@ -7974,7 +7982,8 @@ $TOOL_DEFS = [
     });
 
     // Edit Profile Click
-    document.getElementById('menu-edit-profile').addEventListener('click', async () => {
+    document.getElementById('menu-edit-profile').addEventListener('click', async (e) => {
+      e.stopPropagation(); // Prevent bubbling to header toggle
       profileDropdown.classList.remove('active'); // Close menu
 
       const u = await api('get-profile');
