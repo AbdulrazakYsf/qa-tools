@@ -107,6 +107,50 @@ if (isset($_GET['api'])) {
         echo json_encode(['ok' => true]);
         break;
 
+      /* Profile */
+      case 'update-profile':
+        $user = current_user();
+        $id = $user['id'];
+        if (!$id) {
+          http_response_code(401);
+          echo json_encode(['error' => 'Not logged in']);
+          break;
+        }
+
+        $name = $input['name'] ?? '';
+        $password = $input['password'] ?? '';
+        $avatar = $input['avatar_url'] ?? '';
+
+        if (!$name) {
+          http_response_code(400);
+          echo json_encode(['error' => 'Name is required']);
+          break;
+        }
+
+        if ($password) {
+          $hash = password_hash($password, PASSWORD_DEFAULT);
+          $stmt = $db->prepare("UPDATE qa_users SET name=?, avatar_url=?, password_hash=? WHERE id=?");
+          $stmt->execute([$name, $avatar, $hash, $id]);
+        } else {
+          $stmt = $db->prepare("UPDATE qa_users SET name=?, avatar_url=? WHERE id=?");
+          $stmt->execute([$name, $avatar, $id]);
+        }
+
+        $_SESSION['user_name'] = $name;
+        echo json_encode(['ok' => true]);
+        break;
+
+      case 'get-profile':
+        $user = current_user();
+        if ($user['id']) {
+          $stmt = $db->prepare("SELECT id, name, email, role, avatar_url, created_at FROM qa_users WHERE id=?");
+          $stmt->execute([$user['id']]);
+          echo json_encode($stmt->fetch() ?: []);
+        } else {
+          echo json_encode([]);
+        }
+        break;
+
       /* Runs */
       case 'list-runs':
         $sql = "SELECT tr.*, GROUP_CONCAT(DISTINCT rr.tool_code) as tools FROM qa_test_runs tr LEFT JOIN qa_run_results rr ON tr.id = rr.run_id GROUP BY tr.id ORDER BY tr.run_date DESC LIMIT 100";
@@ -5824,10 +5868,28 @@ function qa_db(): PDO
           email VARCHAR(191) NOT NULL,
           password_hash VARCHAR(255) NOT NULL DEFAULT '',
           role VARCHAR(32) NOT NULL DEFAULT 'tester',
+          avatar_url TEXT,
           is_active TINYINT(1) NOT NULL DEFAULT 1,
           created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
+
+  // Dynamic Migrations (Idempotent)
+  try {
+    $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'avatar_url'")->fetchAll();
+    if (count($cols) == 0) {
+      $pdo->exec("ALTER TABLE qa_users ADD COLUMN avatar_url TEXT AFTER role");
+    }
+  } catch (Exception $e) { /* ignore */
+  }
+
+  try {
+    $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'password_hash'")->fetchAll();
+    if (count($cols) == 0) {
+      $pdo->exec("ALTER TABLE qa_users ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT '' AFTER email");
+    }
+  } catch (Exception $e) { /* ignore */
+  }
 
   return $pdo;
 }
@@ -6419,6 +6481,13 @@ $TOOL_DEFS = [
         <h1>QA Automation Dashboard</h1>
         <small>All tools & dashboard in a single PHP file</small>
       </div>
+    <div class="user-profile" id="profile-trigger" style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+        <div style="text-align:right;">
+             <div style="font-weight:600; font-size:14px;" id="header-username"><?php echo htmlspecialchars($currentUser['name'] ?? 'Guest'); ?></div>
+             <div style="font-size:11px; color:var(--muted); text-transform:uppercase;"><?php echo htmlspecialchars($currentUser['role'] ?? 'Viewer'); ?></div>
+        </div>
+        <img id="header-avatar" src="<?php echo htmlspecialchars($currentUser['avatar_url'] ?? 'https://ui-avatars.com/api/?name=' . urlencode($currentUser['name'] ?? 'User')); ?>" style="width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+      </div>
     </header>
 
     <div class="tabs">
@@ -6574,9 +6643,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                  </option>
+                        <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                          <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                        </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -6697,6 +6766,39 @@ $TOOL_DEFS = [
     </div>
   </div>
 
+  <!-- PROFILE MODAL -->
+  <div class="modal-overlay" id="profile-modal">
+    <div class="modal-card" style="max-width:400px; height:auto; max-height:90%;">
+      <div class="modal-header">
+        <h3>Edit Profile</h3>
+        <button class="modal-close" onclick="closeProfileModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="padding:20px;">
+        <form id="profile-form">
+            <div style="text-align:center; margin-bottom:20px;">
+                <img id="profile-preview" src="" style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:1px solid #ddd;">
+            </div>
+            <div class="form-group" style="margin-bottom:15px;">
+                <label style="display:block; font-size:13px; margin-bottom:5px;">Name</label>
+                <input type="text" id="prof-name" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+            </div>
+             <div class="form-group" style="margin-bottom:15px;">
+                <label style="display:block; font-size:13px; margin-bottom:5px;">Avatar URL</label>
+                <input type="text" id="prof-avatar" placeholder="https://..." style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+            </div>
+             <div class="form-group" style="margin-bottom:20px;">
+                <label style="display:block; font-size:13px; margin-bottom:5px;">New Password (Optional)</label>
+                <input type="password" id="prof-password" placeholder="Leave blank to keep current" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button type="button" class="btn-primary" id="save-profile-btn" style="flex:1;">Save Changes</button>
+                <button type="button" class="btn-ghost" onclick="location.href='logout.php'" style="flex:1; border-color:#ffcdd2; color:#c62828;">Logout</button>
+            </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL FOR TOOLS -->
   <div class="modal-overlay" id="tool-modal">
     <div class="modal-card">
@@ -6744,7 +6846,7 @@ $TOOL_DEFS = [
   </div>
 
   <script>
-    const TOOL_DEFS = <?php echo json_encode($TOOL_DEFS, JSON_UNESCAPED_UNICODE); ?>;
+    const TOOL_DEFS= <?php echo json_encode($TOOL_DEFS, JSON_UNESCAPED_UNICODE); ?>;
     const TOOL_HTML = <?php echo json_encode($TOOLS_HTML, JSON_UNESCAPED_UNICODE); ?>;
 
     let ACTIVE_TOOL = null;
@@ -7630,6 +7732,37 @@ $TOOL_DEFS = [
       }
     }
     enforceRoleUI();
+
+    /* Profile Logic */
+    const profileModal = document.getElementById('profile-modal');
+    
+    document.getElementById('profile-trigger').addEventListener('click', async () => {
+        const u = await api('get-profile');
+        if(u && u.id) {
+            document.getElementById('prof-name').value = u.name;
+            document.getElementById('prof-avatar').value = u.avatar_url || '';
+            document.getElementById('profile-preview').src = u.avatar_url || `https://ui-avatars.com/api/?name=${u.name}`;
+            profileModal.classList.add('active');
+        }
+    });
+
+    function closeProfileModal() {
+        profileModal.classList.remove('active');
+    }
+
+    document.getElementById('save-profile-btn').addEventListener('click', async () => {
+        const name = document.getElementById('prof-name').value;
+        const avatar = document.getElementById('prof-avatar').value;
+        const pass = document.getElementById('prof-password').value;
+        
+        const res = await api('update-profile', { name, avatar_url: avatar, password: pass });
+        if(res.ok) {
+            alert('Profile updated!');
+            location.reload();
+        } else {
+            alert('Error: ' + (res.error || 'Unknown'));
+        }
+    });
 
     /* Initial */
     Promise.all([loadConfigs(), loadUsers(), loadRuns(), loadStats()])

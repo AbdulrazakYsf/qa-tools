@@ -19,6 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_name'] = $user['name'];
             $_SESSION['user_email'] = $user['email'];
             $_SESSION['user_role'] = $user['role'];
+            $_SESSION['avatar_url'] = $user['avatar_url'] ?? '';
 
             // Redirect based on role or default to dashboard
             header('Location: qa-dash9.php');
