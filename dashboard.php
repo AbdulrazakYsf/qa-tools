@@ -133,13 +133,12 @@ if (isset($_GET['api'])) {
             $sql .= " WHERE (c.user_id=? OR c.user_id IS NULL OR c.user_id = 0) ";
             $params[] = $activeProfile;
           }
-          $sql .= " ORDER BY (c.user_id IS NOT NULL AND c.user_id != 0) DESC, c.created_at DESC";
-
+          $sql .= " ORDER BY CASE WHEN c.user_id IS NOT NULL AND c.user_id != 0 THEN 1 ELSE 0 END DESC, c.created_at DESC";
         } elseif ($role !== 'admin') {
           // Normal Tester: Own + Global
           $sql .= " WHERE (c.user_id=? OR c.user_id IS NULL OR c.user_id = 0) ";
           $params[] = $uid;
-          $sql .= " ORDER BY (c.user_id IS NOT NULL AND c.user_id != 0) DESC, c.created_at DESC";
+          $sql .= " ORDER BY CASE WHEN c.user_id IS NOT NULL AND c.user_id != 0 THEN 1 ELSE 0 END DESC, c.created_at DESC";
         } else {
           // Normal Admin: See ALL
           $sql .= " ORDER BY c.tool_code ASC, c.created_at DESC";
