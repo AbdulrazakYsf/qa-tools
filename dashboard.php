@@ -7084,7 +7084,7 @@ $TOOL_DEFS = [
         </div>
         <!-- Open Issues -->
         <div class="stat-card stat-open" style="border-top: 4px solid #FB8C00; cursor:pointer;"
-          onclick="setRunFilter('failed')">
+          onclick="triggerOpenIssuesReport()">
           <h3>Open Issues</h3>
           <div class="stat-value" id="stat-open">0</div>
           <div class="stat-meta">Total open issues across runs</div>
@@ -7228,9 +7228,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                  </option>
+                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                    </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -7425,39 +7425,14 @@ $TOOL_DEFS = [
     </div>
   </section>
 
-  <!-- Report Modal -->
+  <!-- Report Modal (Iframe) -->
   <div id="modal-report" class="modal-overlay">
-    <div class="modal-content"
-      style="max-width: 900px; padding:0; overflow:hidden; display:flex; flex-direction:column; max-height:90vh;">
-      <div class="report-header">
-        <div style="display:flex; justify-content:space-between; align-items:start;">
-          <div>
-            <h1 style="margin:0; font-size:24px;">QA Test Run Report</h1>
-            <div class="subtitle" style="opacity:0.9;">Test Execution Details</div>
-          </div>
-          <button class="close-modal type-white" onclick="closeReportModal()"
-            style="background:rgba(255,255,255,0.2); border:none; color:white; font-size:20px; cursor:pointer; width:32px; height:32px; border-radius:50%;">&times;</button>
-        </div>
-        <div class="report-meta" id="rep-meta">
-          <!-- Populated via JS -->
-        </div>
+    <div class="modal-content" style="width:95%; max-width:1200px; height:90vh; padding:0; display:flex; flex-direction:column; background:#fff;">
+      <div style="padding:10px 15px; background:#f4f7fa; border-bottom:1px solid #ddd; display:flex; justify-content:space-between; align-items:center;">
+          <h2 style="margin:0; font-size:18px; color:#333;">Detailed Report</h2>
+          <button onclick="closeReportModal()" style="background:transparent; border:none; font-size:24px; color:#555; cursor:pointer;">&times;</button>
       </div>
-
-      <div style="padding:24px; overflow-y:auto; flex:1; background:#f4f7fa;">
-        <div class="print-btn-hide" style="text-align:right; margin-bottom:16px;">
-          <button class="btn-primary" onclick="window.print()">Print Report</button>
-        </div>
-
-        <div class="summary-grid" id="rep-summary">
-          <!-- Populated via JS -->
-        </div>
-
-        <div id="rep-notes" class="notes-section" style="display:none; margin-bottom:20px;"></div>
-
-        <div id="rep-content">
-          <!-- Tool Sections go here -->
-        </div>
-      </div>
+      <iframe id="report-iframe" src="about:blank" style="flex:1; border:none; width:100%; height:100%;"></iframe>
     </div>
   </div>
 
@@ -8829,128 +8804,44 @@ $TOOL_DEFS = [
       }
     });
 
-    /* Report Modal Logic */
-    async function openReportModal(runId) {
+    /* Report Modal Logic (Iframe) */
+    function openReportModal(target) {
       const modal = document.getElementById('modal-report');
-      if (!modal) return;
+      const iframe = document.getElementById('report-iframe');
+      if (!modal || !iframe) return;
 
-      modal.classList.add('active');
-      document.getElementById('rep-content').innerHTML = '<div style="text-align:center; padding:20px;">Loading Report...</div>';
+      let url = '';
+      if (typeof target === 'number' || (typeof target === 'string' && /^\d+$/.test(target))) {
+        // It's a Run ID
+        url = `qa_run_report.php?run_id=${target}`;
+      } else if (typeof target === 'string' && target.startsWith('http')) {
+        url = target;
+      } else if (typeof target === 'string') {
+        // Assume relative URL
+        url = target;
+      }
 
-      // Reuse loaded RUNS if possible
-      let run = RUNS.find(r => r.id == runId);
-
-      // Fetch Details
-      const details = await api('run-details', { id: runId });
-
-      renderReport(run, details);
+      if (url) {
+        iframe.src = url;
+        modal.classList.add('active');
+      }
     }
 
     function closeReportModal() {
-      document.getElementById('modal-report').classList.remove('active');
+      const modal = document.getElementById('modal-report');
+      const iframe = document.getElementById('report-iframe');
+      if (modal) modal.classList.remove('active');
+      if (iframe) iframe.src = 'about:blank';
     }
 
-    function renderReport(run, details) {
-      if (!run) return;
-
-      // META
-      const date = new Date(run.run_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      const time = new Date(run.run_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-
-      const metaHtml = `
-            <div class="meta-item"><label>Run ID</label><div class="value">#${run.id}</div></div>
-            <div class="meta-item"><label>Date & Time</label><div class="value">${date} at ${time}</div></div>
-            <div class="meta-item"><label>Status</label><div class="value" style="text-transform:capitalize;">${run.status}</div></div>
-        `;
-      document.getElementById('rep-meta').innerHTML = metaHtml;
-
-      // SUMMARY
-      const total = run.total_tests;
-      const pass = run.passed;
-      const fail = run.failed;
-      const open = run.open_issues;
-      const rate = total > 0 ? Math.round((pass / total) * 100) : 0;
-
-      const sumHtml = `
-            <div class="summary-card"><h3>Total Tests</h3><div class="value">${total}</div></div>
-            <div class="summary-card passed"><h3>Passed</h3><div class="value">${pass}</div></div>
-            <div class="summary-card failed"><h3>Failed</h3><div class="value">${fail}</div></div>
-            <div class="summary-card open"><h3>Open Issues</h3><div class="value">${open}</div></div>
-            <div class="summary-card rate"><h3>Pass Rate</h3><div class="value">${rate}%</div></div>
-        `;
-      document.getElementById('rep-summary').innerHTML = sumHtml;
-
-      // NOTES
-      const notesDiv = document.getElementById('rep-notes');
-      if (run.notes) {
-        notesDiv.innerHTML = `<h3>Run Notes</h3><p>${run.notes}</p>`;
-        notesDiv.style.display = 'block';
-      } else {
-        notesDiv.style.display = 'none';
-      }
-
-      // DETAILS
-      const contentDiv = document.getElementById('rep-content');
-      if (!details || details.length === 0) {
-        contentDiv.innerHTML = '<p style="text-align:center; color:#777;">No detailed results recorded for this run.</p>';
-        return;
-      }
-
-      // Group by Tool
-      const byTool = {};
-      details.forEach(row => {
-        const t = row.tool_code || 'unknown';
-        if (!byTool[t]) byTool[t] = { passed: 0, failed: 0, warn: 0, rows: [] };
-        byTool[t].rows.push(row);
-
-        const s = row.status.toUpperCase();
-        if (['OK', 'PASS', 'PASSED', 'SUCCESS', 'VALID', 'IN STOCK'].includes(s)) byTool[t].passed++;
-        else if (['WARN', 'WARNING'].includes(s)) byTool[t].warn++;
-        else byTool[t].failed++;
-      });
-
-      let html = '';
-      for (const [code, stat] of Object.entries(byTool)) {
-        // Stats Badges
-        let statsHtml = '';
-        if (stat.passed > 0) statsHtml += `<span class="passed">${stat.passed} passed</span> `;
-        if (stat.failed > 0) statsHtml += `<span class="failed">${stat.failed} failed</span> `;
-        if (stat.warn > 0) statsHtml += `<span class="warn">${stat.warn} warnings</span> `;
-
-        // Rows
-        let rowsHtml = '';
-        stat.rows.forEach(r => {
-          const s = r.status.toUpperCase();
-          let badge = 'fail';
-          if (['OK', 'PASS', 'PASSED', 'SUCCESS', 'VALID', 'IN STOCK'].includes(s)) badge = 'ok';
-          else if (['WARN', 'WARNING'].includes(s)) badge = 'warn';
-
-          rowsHtml += `
-                    <tr>
-                       <td style="width:80px;"><span class="mini-badge ${badge}">${r.status}</span></td>
-                       <td class="url-cell" title="${r.url}">${r.url || '-'}</td>
-                       <td>${r.parent || '-'}</td>
-                    </tr>
-                 `;
-        });
-
-        html += `
-                <div class="tool-section">
-                   <div class="tool-header">
-                      <h3>${code.toUpperCase().replace(/_/g, ' ')}</h3>
-                      <div class="tool-stats">${statsHtml}</div>
-                   </div>
-                   <table class="detail-table">
-                      <thead>
-                         <tr><th>Status</th><th>URL/Item</th><th>Parent/Source</th></tr>
-                      </thead>
-                      <tbody>${rowsHtml}</tbody>
-                   </table>
-                </div>
-             `;
-      }
-      contentDiv.innerHTML = html;
-    }
+    window.triggerOpenIssuesReport = function() {
+       const userFilter = document.getElementById('filter-user');
+       let url = 'qa_run_report.php?status=failed';
+       if (userFilter && userFilter.value) {
+           url += '&user_id=' + encodeURIComponent(userFilter.value);
+       }
+       openReportModal(url);
+    };
 
     /* Initial */
     Promise.all([loadConfigs(), loadUsers(), loadRuns(), loadStats()])
