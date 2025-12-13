@@ -7059,9 +7059,17 @@ $TOOL_DEFS = [
       </div>
 
       <div class="section-card" style="margin-top:16px;">
-        <div class="section-header">
-          <h2>Existing Configurations</h2>
-          <small>Reference only â€“ open tool and copy values manually.</small>
+        <div class="section-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <h2>Existing Configurations</h2>
+            <small>Reference only – open tool and copy values manually.</small>
+          </div>
+          <div>
+            <select id="filter-config-owner" class="form-control" style="font-size:12px; padding:4px 8px; width:140px;"
+              onchange="renderConfigsTable()">
+              <option value="">All Owners</option>
+            </select>
+          </div>
         </div>
         <table class="table" id="configs-table">
           <thead>
@@ -8122,47 +8130,75 @@ $TOOL_DEFS = [
           filterSel.appendChild(opt);
         });
 
-        filterSel.value = currentVal; // restore selection
+        const currentVal = filterSel.value;
+          // specific owners
+          const owners = new Map(); // id -> name
+          CONFIGS.forEach(c => {
+             if (c.user_id) owners.set(c.user_id, c.user_name || 'User '+c.user_id);
+             else owners.set('global', 'Global');
+          });
+          
+          // Clear except first
+          while(filterSel.options.length > 1) filterSel.remove(1);
+          
+          // Add Global first if exists
+          if (owners.has('global')) {
+             const opt = document.createElement('option');
+             opt.value = 'global';
+             opt.innerText = 'Global';
+             filterSel.appendChild(opt);
+             owners.delete('global');
+          }
+          
+          // Add others
+          owners.forEach((name, id) => {
+             const opt = document.createElement('option');
+             opt.value = id;
+             opt.innerText = name;
+             filterSel.appendChild(opt);
+          });
+          
+          filterSel.value = currentVal; // restore selection
       }
 
       await renderConfigsTable();
     }
-
+    
     async function renderConfigsTable() {
-      const curUser = await api('get-profile');
+      const curUser = await api('get-profile'); 
       const curUid = curUser.id;
       const isAdmin = (curUser.role === 'admin');
-
+      
       // Admin Editor Dropdown Logic
       const ownerSel = document.getElementById('cfg-owner');
       const ownerWrap = document.getElementById('cfg-owner-wrapper');
       if (isAdmin && ownerSel && ownerSel.options.length <= 1) {
-        const allUsers = await api('list-users');
-        allUsers.forEach(u => {
-          const opt = document.createElement('option');
-          opt.value = u.id;
-          opt.innerText = u.name + ' (User)';
-          ownerSel.appendChild(opt);
-        });
-        ownerWrap.style.display = 'block';
+          const allUsers = await api('list-users');
+          allUsers.forEach(u => {
+              const opt = document.createElement('option');
+              opt.value = u.id;
+              opt.innerText = u.name + ' (User)';
+              ownerSel.appendChild(opt);
+          });
+          ownerWrap.style.display = 'block';
       }
 
       // Filter Logic
       const filterVal = document.getElementById('filter-config-owner') ? document.getElementById('filter-config-owner').value : '';
-
+      
       const tbody = document.querySelector('#configs-table tbody');
       tbody.innerHTML = '';
-
+      
       CONFIGS.forEach((cfg, i) => {
         // Filter Check
         if (filterVal) {
-          if (filterVal === 'global') {
-            if (cfg.user_id) return;
-          } else {
-            if (cfg.user_id != filterVal) return;
-          }
+            if (filterVal === 'global') {
+                if (cfg.user_id) return; 
+            } else {
+                if (cfg.user_id != filterVal) return;
+            }
         }
-
+      
         let snippet = '';
         try {
           const json = JSON.parse(cfg.config_json || '{}');
@@ -8170,25 +8206,25 @@ $TOOL_DEFS = [
         } catch (e) { }
 
         let ownerBadge = '';
-        if (!cfg.user_id) {
-          ownerBadge = '<span class="badge" style="background:#2196f3; color:white;">Global</span>';
+        if(!cfg.user_id) {
+           ownerBadge = '<span class="badge" style="background:#2196f3; color:white;">Global</span>';
         } else if (cfg.user_id == curUid) {
-          ownerBadge = '<span class="badge" style="background:#4caf50; color:white;">You</span>';
+           ownerBadge = '<span class="badge" style="background:#4caf50; color:white;">You</span>';
         } else {
-          ownerBadge = `<span class="badge" style="background:#eee; color:#555;">${cfg.user_name || 'User ' + cfg.user_id}</span>`;
+           ownerBadge = `<span class="badge" style="background:#eee; color:#555;">${cfg.user_name || 'User ' + cfg.user_id}</span>`;
         }
-
+        
         // Actions Visibility
         // Admin: All
         // Tester: Only if Own
         let actions = '';
         if (isAdmin || cfg.user_id == curUid) {
-          actions = `
+           actions = `
              <button data-action="edit">Edit</button>
              <button data-action="delete" class="text-danger">Delete</button>
            `;
         } else {
-          actions = `<span class="text-muted" style="font-size:11px;">Read-only</span>`;
+             actions = `<span class="text-muted" style="font-size:11px;">Read-only</span>`;
         }
 
         const tr = document.createElement('tr');
