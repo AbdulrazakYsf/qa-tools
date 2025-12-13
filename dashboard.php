@@ -59,35 +59,96 @@ if (isset($_GET['api'])) {
   try {
     switch ($action) {
       /* Configs */
+      case 'set-config-profile':
+        require_role(['admin']);
+        $profileId = $input['profile_id'] ?? null;
+
+        // Update user's active profile
+        // If profileId is 0 or "global", store 0. If null/empty/default, store NULL.
+        // If specific user ID, store that ID.
+
+        $val = null;
+        if ($profileId === 'global' || $profileId === 0 || $profileId === '0') {
+          $val = 0;
+        } elseif (is_numeric($profileId) && $profileId > 0) {
+          $val = (int) $profileId;
+        }
+
+        // Ensure column exists (Migration check)
+        try {
+          $cols = $db->query("PRAGMA table_info(qa_users)")->fetchAll(PDO::FETCH_ASSOC);
+          $hasCol = false;
+          foreach ($cols as $c) {
+            if ($c['name'] === 'active_profile_id') {
+              $hasCol = true;
+              break;
+            }
+          }
+          if (!$hasCol) {
+            $db->exec("ALTER TABLE qa_users ADD COLUMN active_profile_id INTEGER DEFAULT NULL");
+          }
+        } catch (Exception $e) { /* Ignore if already exists or DB specific error */
+        }
+
+        $stmt = $db->prepare("UPDATE qa_users SET active_profile_id = ? WHERE id = ?");
+        $stmt->execute([$val, current_user()['id']]);
+
+        echo json_encode(['ok' => true]);
+        break;
+
       case 'list-configs':
         $user = current_user();
         $uid = $user['id'];
         $role = $user['role'];
+
+        // Check for active profile (Admins only)
+        $activeProfile = null;
+        if ($role === 'admin') {
+          // Fetch fresh user data to get active_profile
+          $stmt = $db->prepare("SELECT active_profile_id FROM qa_users WHERE id = ?");
+          $stmt->execute([$uid]);
+          $activeProfile = $stmt->fetchColumn();
+        }
 
         $sql = "SELECT c.*, u.name as user_name 
                 FROM qa_tool_configs c 
                 LEFT JOIN qa_users u ON c.user_id = u.id ";
 
         $params = [];
-        if ($role !== 'admin') {
-          // Testers see: their own configs OR global configs
+
+        if ($role === 'admin' && $activeProfile !== null && $activeProfile !== false) {
+          // ADMIN WITH ACTIVE PROFILE
+          if ($activeProfile == 0) {
+            // Global Only
+            $sql .= " WHERE c.user_id IS NULL ";
+          } else {
+            // Specific User (plus Global usually? User request says "Test Runs will use the loaded configuration". 
+            // Usually if I load User X, I want to see User X's configs.
+            // Let's show User X + Global, just like User X would see.
+            $sql .= " WHERE c.user_id=? OR c.user_id IS NULL ";
+            $params[] = $activeProfile;
+          }
+
+          // Emulate Tester Sort order
+          $sql .= " ORDER BY (c.user_id IS NOT NULL) DESC, c.created_at DESC";
+
+        } elseif ($role !== 'admin') {
+          // Normal Tester: Own + Global
           $sql .= " WHERE c.user_id=? OR c.user_id IS NULL ";
           $params[] = $uid;
-        }
-        // Admin sees ALL (no WHERE clause needed implies all)
-
-        // Order: Own config first (if owner), then Global, then others. 
-        // For admin, maybe just Date DESC? Or maybe group by Tool? 
-        // Let's stick to created_at for Admin, but for tester prioritize their own.
-        if ($role !== 'admin') {
           $sql .= " ORDER BY (c.user_id IS NOT NULL) DESC, c.created_at DESC";
         } else {
+          // Normal Admin (No profile): See ALL
           $sql .= " ORDER BY c.tool_code ASC, c.created_at DESC";
         }
 
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
-        echo json_encode($stmt->fetchAll());
+        $res = $stmt->fetchAll();
+
+        // Append active profile info to metadata (first item or wrapper? JSON array is clean list)
+        // We can pass it via a separate API call 'get-profile', which frontend calls anyway.
+        echo json_encode($res);
         break;
 
       case 'save-config':
@@ -323,14 +384,16 @@ if (isset($_GET['api'])) {
         break;
 
       case 'get-profile':
-        $user = current_user();
-        if ($user['id']) {
-          $stmt = $db->prepare("SELECT id, name, email, role, avatar_url, created_at FROM qa_users WHERE id=?");
-          $stmt->execute([$user['id']]);
-          echo json_encode($stmt->fetch() ?: []);
-        } else {
-          echo json_encode([]);
-        }
+        // Fetch fresh to get active_profile_id
+        $uid = current_user()['id'];
+        $stmt = $db->prepare("SELECT id, name, email, avatar_url, role, active_profile_id FROM qa_users WHERE id=?");
+        $stmt->execute([$uid]);
+        $u = $stmt->fetch(PDO::FETCH_ASSOC);
+        // Fallback if session user deleted?
+        if (!$u)
+          $u = current_user();
+
+        echo json_encode($u);
         break;
 
       /* Runs */
@@ -7217,6 +7280,25 @@ $TOOL_DEFS = [
           <h2>Create / Edit Configuration</h2>
           <small>Inputs are stored only; tools read them manually.</small>
         </div>
+
+        <!-- CONFIGURATION PROFILE SELECTOR (ADMIN ONLY) -->
+        <div id="admin-profile-selector"
+          style="display:none; background:#e3f2fd; padding:12px; margin-bottom:16px; border-radius:6px; border:1px solid #90caf9;">
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div style="font-weight:bold; color:#1565c0;">&#128100; Configuration Profile (Admin Mode)</div>
+            <div style="flex:1;"></div>
+            <select id="profile-select" style="padding:6px; border-radius:4px; max-width:200px;">
+              <option value="global">Default / Global</option>
+              <!-- Users populated via JS -->
+            </select>
+            <button id="btn-load-profile" class="btn-primary" style="padding:6px 12px; font-size:13px;">Load
+              Profile</button>
+          </div>
+          <div style="font-size:12px; color:#555; margin-top:6px;">
+            <strong id="active-profile-display">Active Profile: Default</strong> &mdash;
+            Testing tools and config lists will behave as this user.
+          </div>
+        </div>
         <form id="config-form">
           <input type="hidden" id="cfg-id">
           <div class="form-grid">
@@ -8360,10 +8442,49 @@ $TOOL_DEFS = [
       const curUid = curUser.id;
       const isAdmin = (curUser.role === 'admin');
 
+      // Admin: Profile Selector Logic
+      const profileSel = document.getElementById('admin-profile-selector');
+      if (isAdmin && profileSel) {
+        profileSel.style.display = 'block';
+
+        // Populate Dropdown if empty
+        const sel = document.getElementById('profile-select');
+        if (sel && sel.options.length <= 1) {
+          const allUsers = await api('list-users');
+          allUsers.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.innerText = u.name;
+            sel.appendChild(opt);
+          });
+        }
+
+        // Set current value
+        if (curUser.active_profile_id !== null && curUser.active_profile_id !== undefined) {
+          // 0 means global, >0 means user
+          sel.value = curUser.active_profile_id == 0 ? 'global' : curUser.active_profile_id;
+        } else {
+          sel.value = 'default'; // Null
+        }
+
+        // Update Display Text
+        const disp = document.getElementById('active-profile-display');
+        if (sel.value === 'global') {
+          disp.innerHTML = '<strong>Active Profile: Global Only</strong> &mdash; Viewing/Running Global configs.';
+        } else if (sel.value === 'default' || !sel.value) {
+          disp.innerHTML = '<strong>Active Profile: Default (Admin)</strong> &mdash; Viewing All Configs.';
+        } else {
+          const txt = sel.options[sel.selectedIndex].innerText;
+          disp.innerHTML = `<strong>Active Profile: ${txt}</strong> &mdash; Acting as this user.`;
+        }
+      }
+
       // Admin Editor Dropdown Logic
       const ownerSel = document.getElementById('cfg-owner');
       const ownerWrap = document.getElementById('cfg-owner-wrapper');
       if (isAdmin && ownerSel && ownerSel.options.length <= 1) {
+        // Reuse list-users from above or fetch if needed. 
+        // We can just re-fetch to be safe or optimize later.
         const allUsers = await api('list-users');
         allUsers.forEach(u => {
           const opt = document.createElement('option');
@@ -8431,6 +8552,28 @@ $TOOL_DEFS = [
         ${actions}
       </td>`;
         tbody.appendChild(tr);
+      });
+    }
+
+    // Profile Switch Handler
+    const btnLoadProfile = document.getElementById('btn-load-profile');
+    if (btnLoadProfile) {
+      btnLoadProfile.addEventListener('click', async () => {
+        const sel = document.getElementById('profile-select');
+        const val = sel.value; // 'global' or userID
+
+        try {
+          const res = await api('set-config-profile', { profile_id: val });
+          if (res.ok) {
+            alert('Profile Loaded!');
+            await loadConfigs(); // Refresh configs
+          } else {
+            alert('Error loading profile');
+          }
+        } catch (e) {
+          console.error(e);
+          alert('Connection error');
+        }
       });
     }
 
