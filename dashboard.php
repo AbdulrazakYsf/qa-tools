@@ -7794,17 +7794,17 @@ $TOOL_DEFS = [
         // Flatten results for backend
         const flatResults = [];
         allDetails.forEach(d => {
-            if (d.rows && d.rows.length) {
-                d.rows.forEach(r => {
-                    flatResults.push({
-                        tool_code: d.tool_code,
-                        status: r.status,
-                        url: r.url,
-                        parent: r.parent,
-                        payload: r
-                    });
-                });
-            }
+          if (d.rows && d.rows.length) {
+            d.rows.forEach(r => {
+              flatResults.push({
+                tool_code: d.tool_code,
+                status: r.status,
+                url: r.url,
+                parent: r.parent,
+                payload: r
+              });
+            });
+          }
         });
 
         await api('save-run', {
@@ -8087,14 +8087,53 @@ $TOOL_DEFS = [
 
 
     /* Configs */
+    /* Configs */
     async function loadConfigs() {
       CONFIGS = await api('list-configs');
+
+      // Populate Filter Dropdown (extract unique owners)
+      const filterSel = document.getElementById('filter-config-owner');
+      if (filterSel) {
+        const currentVal = filterSel.value;
+        // specific owners
+        const owners = new Map(); // id -> name
+        CONFIGS.forEach(c => {
+          if (c.user_id) owners.set(c.user_id, c.user_name || 'User ' + c.user_id);
+          else owners.set('global', 'Global');
+        });
+
+        // Clear except first
+        while (filterSel.options.length > 1) filterSel.remove(1);
+
+        // Add Global first if exists
+        if (owners.has('global')) {
+          const opt = document.createElement('option');
+          opt.value = 'global';
+          opt.innerText = 'Global';
+          filterSel.appendChild(opt);
+          owners.delete('global');
+        }
+
+        // Add others
+        owners.forEach((name, id) => {
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.innerText = name;
+          filterSel.appendChild(opt);
+        });
+
+        filterSel.value = currentVal; // restore selection
+      }
+
+      await renderConfigsTable();
+    }
+
+    async function renderConfigsTable() {
       const curUser = await api('get-profile');
       const curUid = curUser.id;
-
       const isAdmin = (curUser.role === 'admin');
 
-      // Populate Owner Dropdown if Admin
+      // Admin Editor Dropdown Logic
       const ownerSel = document.getElementById('cfg-owner');
       const ownerWrap = document.getElementById('cfg-owner-wrapper');
       if (isAdmin && ownerSel && ownerSel.options.length <= 1) {
@@ -8108,9 +8147,22 @@ $TOOL_DEFS = [
         ownerWrap.style.display = 'block';
       }
 
+      // Filter Logic
+      const filterVal = document.getElementById('filter-config-owner') ? document.getElementById('filter-config-owner').value : '';
+
       const tbody = document.querySelector('#configs-table tbody');
       tbody.innerHTML = '';
+
       CONFIGS.forEach((cfg, i) => {
+        // Filter Check
+        if (filterVal) {
+          if (filterVal === 'global') {
+            if (cfg.user_id) return;
+          } else {
+            if (cfg.user_id != filterVal) return;
+          }
+        }
+
         let snippet = '';
         try {
           const json = JSON.parse(cfg.config_json || '{}');
@@ -8156,7 +8208,7 @@ $TOOL_DEFS = [
     }
 
     document.querySelector('#configs-table').addEventListener('click', async (e) => {
-      const btn = e.target.closest('button'          ) ; if (!btn) return;
+      const btn = e.target.closest('button'); if (!btn) return;
       const tr = btn.closest('tr'); const id = parseInt(tr.dataset.id, 10);
       const cfg = CONFIGS.find(c => c.id == id); if (!cfg) return;
 
@@ -8165,7 +8217,7 @@ $TOOL_DEFS = [
         document.getElementById('cfg-name').value = cfg.config_name;
         document.getElementById('cfg-tool-code').value = cfg.tool_code;
         document.getElementById('cfg-enabled').checked = !!cfg.is_enabled;
-        let inputs              = '';
+        let inputs = '';
         try {
           const json = JSON.parse(cfg.config_json || '{}');
           inputs = json.inputs || '';
@@ -8197,11 +8249,11 @@ $TOOL_DEFS = [
         alert('Configuration name and tool are required.');
         return;
       }
-      
+
       const ownerSel = document.getElementById('cfg-owner');
       let ownerId = undefined;
       if (ownerSel && ownerSel.offsetParent !== null) {
-          ownerId = ownerSel.value === "" ? null : parseInt(ownerSel.value);
+        ownerId = ownerSel.value === "" ? null : parseInt(ownerSel.value);
       }
 
       const payload = {
@@ -8209,7 +8261,7 @@ $TOOL_DEFS = [
         config: { inputs: inputs }, is_enabled: enabled ? 1 : 0
       };
       if (ownerId !== undefined) {
-          payload.owner_id = ownerId;
+        payload.owner_id = ownerId;
       }
 
       await api('save-config', payload);
@@ -8220,21 +8272,21 @@ $TOOL_DEFS = [
       await loadConfigs();
     });
 
-      document.getElementById('cfg-reset-btn').addEventListener('click', () => {
-        document.getElementById('config-form').reset();
-        document.getElementById('cfg-id').value = '';
-        document.getElementById('cfg-enabled').checked = true;
-      });
+    document.getElementById('cfg-reset-btn').addEventListener('click', () => {
+      document.getElementById('config-form').reset();
+      document.getElementById('cfg-id').value = '';
+      document.getElementById('cfg-enabled').checked = true;
+    });
 
-      /* Users */
-      async function loadUsers() {
-        USERS = await api('list-users');
-        const tbody = document.querySelector('#users-table tbody');
-        tbody.innerHTML = '';
-        USERS.forEach((u, i) => {
-          const tr = document.createElement('tr');
-          tr.dataset.id = u.id;
-          tr.innerHTML = `
+    /* Users */
+    async function loadUsers() {
+      USERS = await api('list-users');
+      const tbody = document.querySelector('#users-table tbody');
+      tbody.innerHTML = '';
+      USERS.forEach((u, i) => {
+        const tr = document.createElement('tr');
+        tr.dataset.id = u.id;
+        tr.innerHTML = `
       <td>${i + 1}</td>
       <td>${u.name}</td>
       <td>${u.email}</td>
@@ -8244,151 +8296,151 @@ $TOOL_DEFS = [
         <button data-action="edit">Edit</button>
         <button data-action="delete">Delete</button>
       </td>`;
-          tbody.appendChild(tr);
-        });
-      }
-
-      document.querySelector('#users-table').addEventListener('click', async (e) => {
-        const btn = e.target.closest('button'); if (!btn) return;
-        const tr = btn.closest('tr'); const id = parseInt(tr.dataset.id, 10);
-        const u = USERS.find(x => x.id == id); if (!u) return;
-
-        if (btn.dataset.action === 'edit') {
-          document.getElementById('user-id').value = u.id;
-          document.getElementById('user-name').value = u.name;
-          document.getElementById('user-email').value = u.email;
-          document.getElementById('user-role').value = u.role;
-          document.getElementById('user-active').checked = !!u.is_active;
-        } else if (btn.dataset.action === 'delete') {
-          if (!confirm('Delete user \"' + u.name + '\"?')) return;
-          await api('delete-user', { id: u.id });
-          await loadUsers();
-        }
+        tbody.appendChild(tr);
       });
+    }
 
-      document.getElementById('user-save-btn').addEventListener('click', async () => {
-        const id = document.getElementById('user-id').value || null;
-        const name = document.getElementById('user-name').value.trim();
-        const email = document.getElementById('user-email').value.trim();
-        const password = document.getElementById('user-password').value.trim();
-        const role = document.getElementById('user-role').value;
-        const active = document.getElementById('user-active').checked;
+    document.querySelector('#users-table').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button'); if (!btn) return;
+      const tr = btn.closest('tr'); const id = parseInt(tr.dataset.id, 10);
+      const u = USERS.find(x => x.id == id); if (!u) return;
 
-        if (!name || !email) {
-          alert('Name and email are required.');
-          return;
-        }
-
-        await api('save-user', { id: id, name: name, email: email, password: password, role: role, is_active: active ? 1 : 0 });
-
-        document.getElementById('user-form').reset();
-        document.getElementById('user-id').value = '';
-        document.getElementById('user-active').checked = true;
+      if (btn.dataset.action === 'edit') {
+        document.getElementById('user-id').value = u.id;
+        document.getElementById('user-name').value = u.name;
+        document.getElementById('user-email').value = u.email;
+        document.getElementById('user-role').value = u.role;
+        document.getElementById('user-active').checked = !!u.is_active;
+      } else if (btn.dataset.action === 'delete') {
+        if (!confirm('Delete user \"' + u.name + '\"?')) return;
+        await api('delete-user', { id: u.id });
         await loadUsers();
-      });
+      }
+    });
 
-      document.getElementById('user-reset-btn').addEventListener('click', () => {
-        document.getElementById('user-form').reset();
-        document.getElementById('user-id').value = '';
-        document.getElementById('user-active').checked = true;
-      });
+    document.getElementById('user-save-btn').addEventListener('click', async () => {
+      const id = document.getElementById('user-id').value || null;
+      const name = document.getElementById('user-name').value.trim();
+      const email = document.getElementById('user-email').value.trim();
+      const password = document.getElementById('user-password').value.trim();
+      const role = document.getElementById('user-role').value;
+      const active = document.getElementById('user-active').checked;
 
-      /* Stats */
-      async function loadStats(userId = null) {
-        try {
-          const payload = userId ? { user_id: userId } : {};
-          const s = await api('stats', payload);
-          document.getElementById('stat-total').textContent = s.total_runs;
-          document.getElementById('stat-passed').textContent = s.passed;
-          document.getElementById('stat-failed').textContent = s.failed;
-          document.getElementById('stat-open').textContent = s.open_issues;
-        } catch (e) {
-          console.error('Stats error:', e);
+      if (!name || !email) {
+        alert('Name and email are required.');
+        return;
+      }
+
+      await api('save-user', { id: id, name: name, email: email, password: password, role: role, is_active: active ? 1 : 0 });
+
+      document.getElementById('user-form').reset();
+      document.getElementById('user-id').value = '';
+      document.getElementById('user-active').checked = true;
+      await loadUsers();
+    });
+
+    document.getElementById('user-reset-btn').addEventListener('click', () => {
+      document.getElementById('user-form').reset();
+      document.getElementById('user-id').value = '';
+      document.getElementById('user-active').checked = true;
+    });
+
+    /* Stats */
+    async function loadStats(userId = null) {
+      try {
+        const payload = userId ? { user_id: userId } : {};
+        const s = await api('stats', payload);
+        document.getElementById('stat-total').textContent = s.total_runs;
+        document.getElementById('stat-passed').textContent = s.passed;
+        document.getElementById('stat-failed').textContent = s.failed;
+        document.getElementById('stat-open').textContent = s.open_issues;
+      } catch (e) {
+        console.error('Stats error:', e);
+      }
+    }
+    async function enforceRoleUI() {
+      if (typeof CURRENT_USER_ROLE === 'undefined') return;
+      const role = CURRENT_USER_ROLE.toLowerCase();
+
+      const tabConfigs = document.querySelector('button[data-tab="configs"]');
+      const tabUsers = document.querySelector('button[data-tab="users"]');
+      const tabSupport = document.querySelector('button[data-tab="support"]');
+      const suppAdmin = document.getElementById('support-admin-view');
+      const contactForm = document.getElementById('contact-support-form');
+      const myTickets = document.getElementById('my-support-tickets');
+
+      const userFilter = document.getElementById('filter-user-container');
+
+      // Default text
+      if (tabSupport) tabSupport.textContent = 'Support';
+
+      // User Filter Visibility
+      if (role === 'admin' || role === 'viewer') {
+        if (userFilter) userFilter.style.display = 'block';
+      } else {
+        if (userFilter) userFilter.style.display = 'none';
+      }
+
+      if (role === 'viewer') {
+        if (tabConfigs) tabConfigs.style.display = 'none';
+        if (tabUsers) tabUsers.style.display = 'none';
+      } else if (role === 'tester') {
+        if (tabUsers) tabUsers.style.display = 'none';
+      }
+
+      if (role === 'admin') {
+        if (contactForm) contactForm.style.display = 'none';
+        if (myTickets) myTickets.style.display = 'none'; // Admin doesn't need personal history here
+        if (suppAdmin) {
+          suppAdmin.style.display = 'block';
+          loadSupport();
+        }
+        if (tabSupport) {
+          tabSupport.textContent = 'Support Center';
+          const c = await api('get-unread-support');
+          if (c && c.count > 0) {
+            tabSupport.innerHTML += ` <span style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:11px;">${c.count}</span>`;
+          }
+        }
+      } else {
+        // Non-admin (User)
+        if (myTickets) {
+          myTickets.style.display = 'block';
+          loadMySupport();
         }
       }
-      async function enforceRoleUI() {
-        if (typeof CURRENT_USER_ROLE === 'undefined') return;
-        const role = CURRENT_USER_ROLE.toLowerCase();
+    }
+    enforceRoleUI();
 
-        const tabConfigs = document.querySelector('button[data-tab="configs"]');
-        const tabUsers = document.querySelector('button[data-tab="users"]');
-        const tabSupport = document.querySelector('button[data-tab="support"]');
-        const suppAdmin = document.getElementById('support-admin-view');
-        const contactForm = document.getElementById('contact-support-form');
-        const myTickets = document.getElementById('my-support-tickets');
-
-        const userFilter = document.getElementById('filter-user-container');
-
-        // Default text
-        if (tabSupport) tabSupport.textContent = 'Support';
-
-        // User Filter Visibility
-        if (role === 'admin' || role === 'viewer') {
-          if (userFilter) userFilter.style.display = 'block';
-        } else {
-          if (userFilter) userFilter.style.display = 'none';
-        }
-
-        if (role === 'viewer') {
-          if (tabConfigs) tabConfigs.style.display = 'none';
-          if (tabUsers) tabUsers.style.display = 'none';
-        } else if (role === 'tester') {
-          if (tabUsers) tabUsers.style.display = 'none';
-        }
-
-        if (role === 'admin') {
-          if (contactForm) contactForm.style.display = 'none';
-          if (myTickets) myTickets.style.display = 'none'; // Admin doesn't need personal history here
-          if (suppAdmin) {
-            suppAdmin.style.display = 'block';
-            loadSupport();
-          }
-          if (tabSupport) {
-            tabSupport.textContent = 'Support Center';
-            const c = await api('get-unread-support');
-            if (c && c.count > 0) {
-              tabSupport.innerHTML += ` <span style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:11px;">${c.count}</span>`;
-            }
-          }
-        } else {
-          // Non-admin (User)
-          if (myTickets) {
-            myTickets.style.display = 'block';
-            loadMySupport();
-          }
-        }
+    /* Support Logic */
+    document.getElementById('btn-send-support').addEventListener('click', async () => {
+      const subject = document.getElementById('supp-subject').value;
+      const message = document.getElementById('supp-message').value;
+      const res = await api('save-support', { subject, message });
+      if (res.ok) {
+        alert('Message sent to support!');
+        document.getElementById('supp-subject').value = '';
+        document.getElementById('supp-message').value = '';
+        loadMySupport(); // Refresh list
+      } else {
+        alert('Error sending message');
       }
-      enforceRoleUI();
+    });
 
-      /* Support Logic */
-      document.getElementById('btn-send-support').addEventListener('click', async () => {
-        const subject = document.getElementById('supp-subject').value;
-        const message = document.getElementById('supp-message').value;
-        const res = await api('save-support', { subject, message });
-        if (res.ok) {
-          alert('Message sent to support!');
-          document.getElementById('supp-subject').value = '';
-          document.getElementById('supp-message').value = '';
-          loadMySupport(); // Refresh list
-        } else {
-          alert('Error sending message');
-        }
-      });
-
-      async function loadSupport() {
-        const list = document.getElementById('support-list');
-        if (!list) return;
-        const msgs = await api('list-support');
-        list.innerText = '';
-        if (msgs.length === 0) {
-          list.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#888;">No messages found.</td></tr>';
-          return;
-        }
-        list.innerHTML = msgs.map(m => {
-          const isUnread = m.is_read == 0;
-          const style = isUnread ? 'font-weight:bold; background:#f0f8ff;' : '';
-          const replyStatus = m.admin_reply ? '<span style="color:green; font-weight:bold;">Replied</span>' : '<span style="color:orange;">Pending</span>';
-          return `
+    async function loadSupport() {
+      const list = document.getElementById('support-list');
+      if (!list) return;
+      const msgs = await api('list-support');
+      list.innerText = '';
+      if (msgs.length === 0) {
+        list.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#888;">No messages found.</td></tr>';
+        return;
+      }
+      list.innerHTML = msgs.map(m => {
+        const isUnread = m.is_read == 0;
+        const style = isUnread ? 'font-weight:bold; background:#f0f8ff;' : '';
+        const replyStatus = m.admin_reply ? '<span style="color:green; font-weight:bold;">Replied</span>' : '<span style="color:orange;">Pending</span>';
+        return `
             <tr style="${style} cursor:pointer;" onclick="toggleReplyRow(${m.id}, this)">
                 <td>${m.created_at}</td>
                 <td><strong>${m.user_name}</strong><br><small style="color:#888;">${m.user_email}</small></td>
@@ -8400,52 +8452,52 @@ $TOOL_DEFS = [
                     <p><strong>Message:</strong> ${m.message}</p>
                     <hr style="margin:10px 0; border:0; border-top:1px solid #ddd;">
                     ${m.admin_reply ?
-              `<div style="background:#e8f5e9; padding:10px; border-radius:4px; margin-bottom:10px;">
+            `<div style="background:#e8f5e9; padding:10px; border-radius:4px; margin-bottom:10px;">
                             <strong>Admin Reply (${m.reply_at}):</strong><br>${m.admin_reply}
                          </div>` :
-              `<div style="margin-bottom:10px;">
+            `<div style="margin-bottom:10px;">
                             <textarea id="reply-text-${m.id}" style="width:100%; height:80px; padding:8px;" placeholder="Type reply..."></textarea>
                             <button onclick="sendReply(${m.id})" class="btn-primary" style="margin-top:5px; padding:4px 10px; font-size:12px;">Send Reply</button>
                          </div>`
-            }
+          }
                 </td>
             </tr>
         `}).join('');
-      }
+    }
 
-      function toggleReplyRow(id, row) {
-        // Mark read if bold
-        if (row.style.fontWeight.includes('bold') || row.style.fontWeight === 'bold') {
-          api('mark-support-read', { id });
-          row.style.fontWeight = 'normal';
-          row.style.background = 'transparent';
-        }
-        const r = document.getElementById(`reply-row-${id}`);
-        r.style.display = r.style.display === 'none' ? 'table-row' : 'none';
+    function toggleReplyRow(id, row) {
+      // Mark read if bold
+      if (row.style.fontWeight.includes('bold') || row.style.fontWeight === 'bold') {
+        api('mark-support-read', { id });
+        row.style.fontWeight = 'normal';
+        row.style.background = 'transparent';
       }
+      const r = document.getElementById(`reply-row-${id}`);
+      r.style.display = r.style.display === 'none' ? 'table-row' : 'none';
+    }
 
-      async function sendReply(id) {
-        const txt = document.getElementById(`reply-text-${id}`).value;
-        if (!txt) return alert('Enter reply');
-        const res = await api('reply-support', { id, reply: txt });
-        if (res.ok) {
-          alert('Replied!');
-          loadSupport();
-        } else {
-          alert('Error replying');
-        }
+    async function sendReply(id) {
+      const txt = document.getElementById(`reply-text-${id}`).value;
+      if (!txt) return alert('Enter reply');
+      const res = await api('reply-support', { id, reply: txt });
+      if (res.ok) {
+        alert('Replied!');
+        loadSupport();
+      } else {
+        alert('Error replying');
       }
+    }
 
-      async function loadMySupport() {
-        const list = document.getElementById('my-support-list');
-        if (!list) return; // Might not exist yet in HTML
-        const msgs = await api('my-support-history');
-        list.innerHTML = '';
-        if (msgs.length === 0) {
-          list.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">No tickets yet.</div>';
-          return;
-        }
-        list.innerHTML = msgs.map(m => `
+    async function loadMySupport() {
+      const list = document.getElementById('my-support-list');
+      if (!list) return; // Might not exist yet in HTML
+      const msgs = await api('my-support-history');
+      list.innerHTML = '';
+      if (msgs.length === 0) {
+        list.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">No tickets yet.</div>';
+        return;
+      }
+      list.innerHTML = msgs.map(m => `
             <div style="border:1px solid #eee; padding:10px; margin-bottom:10px; border-radius:4px; background:white;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                    <strong>${m.subject}</strong>
@@ -8453,82 +8505,82 @@ $TOOL_DEFS = [
                 </div>
                 <div style="margin-bottom:5px; color:#555;">${m.message}</div>
                 ${m.admin_reply ?
-            `<div style="background:#f1f8e9; padding:8px; border-radius:4px; margin-top:5px; font-size:13px; border-left:3px solid #4caf50;">
+          `<div style="background:#f1f8e9; padding:8px; border-radius:4px; margin-top:5px; font-size:13px; border-left:3px solid #4caf50;">
                         <strong>Admin Reply:</strong> ${m.admin_reply}
                      </div>`
-            : '<div style="font-size:12px; color:orange; margin-top:5px;">Awaiting Reply...</div>'
-          }
+          : '<div style="font-size:12px; color:orange; margin-top:5px;">Awaiting Reply...</div>'
+        }
             </div>
         `).join('');
+    }
+    /* Profile Logic */
+    const profileModal = document.getElementById('profile-modal');
+    const profileDropdown = document.getElementById('profile-dropdown');
+
+    // Toggle Dropdown
+    document.getElementById('profile-trigger').addEventListener('click', (e) => {
+      // Only toggle if not clicking inside the dropdown
+      if (e.target.closest('.profile-dropdown')) return;
+      profileDropdown.classList.toggle('active');
+      e.stopPropagation();
+    });
+
+    // Close Dropdown when clicking outside
+    document.addEventListener('click', () => {
+      profileDropdown.classList.remove('active');
+    });
+
+    // Edit Profile Click
+    document.getElementById('menu-edit-profile').addEventListener('click', async (e) => {
+      e.stopPropagation(); // Prevent bubbling to header toggle
+      profileDropdown.classList.remove('active'); // Close menu
+
+      const u = await api('get-profile');
+      if (u && u.id) {
+        document.getElementById('prof-name').value = u.name;
+        document.getElementById('prof-avatar').value = u.avatar_url || '';
+        document.getElementById('profile-preview').src = u.avatar_url || `https://ui-avatars.com/api/?name=${u.name}`;
+        profileModal.classList.add('active'); // Open Modal
       }
-      /* Profile Logic */
-      const profileModal = document.getElementById('profile-modal');
-      const profileDropdown = document.getElementById('profile-dropdown');
+    });
 
-      // Toggle Dropdown
-      document.getElementById('profile-trigger').addEventListener('click', (e) => {
-        // Only toggle if not clicking inside the dropdown
-        if (e.target.closest('.profile-dropdown')) return;
-        profileDropdown.classList.toggle('active');
-        e.stopPropagation();
-      });
+    function closeProfileModal() {
+      profileModal.classList.remove('active');
+    }
 
-      // Close Dropdown when clicking outside
-      document.addEventListener('click', () => {
-        profileDropdown.classList.remove('active');
-      });
+    document.getElementById('save-profile-btn').addEventListener('click', async () => {
+      const name = document.getElementById('prof-name').value;
+      let avatar = document.getElementById('prof-avatar').value;
+      const pass = document.getElementById('prof-password').value;
+      const fileInput = document.getElementById('prof-file');
 
-      // Edit Profile Click
-      document.getElementById('menu-edit-profile').addEventListener('click', async (e) => {
-        e.stopPropagation(); // Prevent bubbling to header toggle
-        profileDropdown.classList.remove('active'); // Close menu
-
-        const u = await api('get-profile');
-        if (u && u.id) {
-          document.getElementById('prof-name').value = u.name;
-          document.getElementById('prof-avatar').value = u.avatar_url || '';
-          document.getElementById('profile-preview').src = u.avatar_url || `https://ui-avatars.com/api/?name=${u.name}`;
-          profileModal.classList.add('active'); // Open Modal
-        }
-      });
-
-      function closeProfileModal() {
-        profileModal.classList.remove('active');
+      // Handle File Upload
+      if (fileInput.files.length > 0) {
+        const fd = new FormData();
+        fd.append('avatar', fileInput.files[0]);
+        try {
+          const upRes = await fetch('?api=upload-avatar', { method: 'POST', body: fd });
+          const upJson = await upRes.json();
+          if (upJson.ok) {
+            avatar = upJson.url;
+          } else {
+            alert('Upload failed: ' + upJson.error); return;
+          }
+        } catch (e) { alert('Upload failed'); return; }
       }
 
-      document.getElementById('save-profile-btn').addEventListener('click', async () => {
-        const name = document.getElementById('prof-name').value;
-        let avatar = document.getElementById('prof-avatar').value;
-        const pass = document.getElementById('prof-password').value;
-        const fileInput = document.getElementById('prof-file');
+      const res = await api('update-profile', { name, avatar_url: avatar, password: pass });
+      if (res.ok) {
+        alert('Profile updated!');
+        location.reload();
+      } else {
+        alert('Error: ' + (res.error || 'Unknown'));
+      }
+    });
 
-        // Handle File Upload
-        if (fileInput.files.length > 0) {
-          const fd = new FormData();
-          fd.append('avatar', fileInput.files[0]);
-          try {
-            const upRes = await fetch('?api=upload-avatar', { method: 'POST', body: fd });
-            const upJson = await upRes.json();
-            if (upJson.ok) {
-              avatar = upJson.url;
-            } else {
-              alert('Upload failed: ' + upJson.error); return;
-            }
-          } catch (e) { alert('Upload failed'); return; }
-        }
-
-        const res = await api('update-profile', { name, avatar_url: avatar, password: pass });
-        if (res.ok) {
-          alert('Profile updated!');
-          location.reload();
-        } else {
-          alert('Error: ' + (res.error || 'Unknown'));
-        }
-      });
-
-      /* Initial */
-      Promise.all([loadConfigs(), loadUsers(), loadRuns(), loadStats()])
-        .catch(console.error);
+    /* Initial */
+    Promise.all([loadConfigs(), loadUsers(), loadRuns(), loadStats()])
+      .catch(console.error);
   </script>
 </body>
 
