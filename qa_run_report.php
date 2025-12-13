@@ -20,29 +20,110 @@ function qa_db()
     return get_db_auth();
 }
 
-// Get run ID from query parameter
+// Get run ID or Filters
 $runId = isset($_GET['run_id']) ? (int) $_GET['run_id'] : 0;
+$filterUser = isset($_GET['user_id']) ? (int) $_GET['user_id'] : 0;
+$filterStatus = isset($_GET['status']) ? $_GET['status'] : ''; // passed, failed, or empty for all
 
-if (!$runId) {
-    die('Run ID required. Usage: qa_run_report.php?run_id=123');
+if (!$runId && !$filterUser && !$filterStatus) {
+    die('Run ID or Filters (user_id/status) required.');
 }
 
 try {
     $db = qa_db();
+    $reportTitle = "QA Run Report";
+    $reportSubtitle = "Details";
+    $run = [];
+    $details = [];
 
-    // Get run summary
-    $stmt = $db->prepare("SELECT * FROM qa_test_runs WHERE id = ?");
-    $stmt->execute([$runId]);
-    $run = $stmt->fetch();
+    if ($runId) {
+        // SINGLE RUN MODE
+        $stmt = $db->prepare("SELECT * FROM qa_test_runs WHERE id = ?");
+        $stmt->execute([$runId]);
+        $run = $stmt->fetch();
 
-    if (!$run) {
-        die('Run not found.');
+        if (!$run)
+            die('Run not found.');
+
+        $reportTitle = "QA Test Run Report #$runId";
+        $reportSubtitle = date('M j, Y H:i', strtotime($run['run_date']));
+
+        $stmt = $db->prepare("SELECT * FROM qa_run_results WHERE run_id = ? ORDER BY tool_code, status, url");
+        $stmt->execute([$runId]);
+        $details = $stmt->fetchAll();
+
+    } else {
+        // AGGREGATE MODE
+        // 1. Build Run Query
+        $sqlRuns = "SELECT * FROM qa_test_runs WHERE 1=1";
+        $paramsRuns = [];
+
+        if ($filterUser) {
+            $sqlRuns .= " AND user_id = ?";
+            $paramsRuns[] = $filterUser;
+        }
+
+        if ($filterStatus === 'failed') {
+            $sqlRuns .= " AND status = 'failed'";
+        } elseif ($filterStatus === 'passed') {
+            $sqlRuns .= " AND status = 'passed'";
+        }
+
+        $stmt = $db->prepare($sqlRuns);
+        $stmt->execute($paramsRuns);
+        $runs = $stmt->fetchAll();
+
+        if (empty($runs)) {
+            $run = [
+                'total_tests' => 0,
+                'passed' => 0,
+                'failed' => 0,
+                'open_issues' => 0,
+                'status' => 'aggregated',
+                'run_date' => date('Y-m-d H:i:s'),
+                'notes' => 'No runs found matching filters.'
+            ];
+        } else {
+            // Aggregation Calculation
+            $agg = ['total_tests' => 0, 'passed' => 0, 'failed' => 0, 'open_issues' => 0];
+            $runIds = [];
+            foreach ($runs as $r) {
+                $agg['total_tests'] += $r['total_tests'];
+                $agg['passed'] += $r['passed'];
+                $agg['failed'] += $r['failed'];
+                $agg['open_issues'] += $r['open_issues'];
+                $runIds[] = $r['id'];
+            }
+            $run = array_merge($agg, [
+                'status' => 'aggregated',
+                'run_date' => date('Y-m-d H:i:s'),
+                'notes' => 'Aggregated report for ' . count($runIds) . ' run(s).'
+            ]);
+
+            // 2. Fetch Details (Only if we have runs)
+            if (!empty($runIds)) {
+                $inQuery = implode(',', array_fill(0, count($runIds), '?'));
+                $sqlDetails = "SELECT * FROM qa_run_results WHERE run_id IN ($inQuery)";
+
+                // If filtering by failed status, show only critical items
+                if ($filterStatus === 'failed') {
+                    $sqlDetails .= " AND status NOT IN ('OK','PASS','PASSED','VALID','SUCCESS','IN STOCK')";
+                } elseif ($filterStatus === 'passed') {
+                    $sqlDetails .= " AND status IN ('OK','PASS','PASSED','VALID','SUCCESS','IN STOCK')";
+                }
+
+                $sqlDetails .= " ORDER BY tool_code, status, url";
+                $stmt = $db->prepare($sqlDetails);
+                $stmt->execute($runIds);
+                $details = $stmt->fetchAll();
+            }
+        }
+
+        $reportTitle = "Aggregated QA Report";
+        $reportSubtitle = $filterUser ? "User Filter Active" : "All Users";
+        if ($filterStatus)
+            $reportSubtitle .= " | " . ucfirst($filterStatus);
     }
-
-    // Get run details
-    $stmt = $db->prepare("SELECT * FROM qa_run_results WHERE run_id = ? ORDER BY tool_code, status, url");
-    $stmt->execute([$runId]);
-    $details = $stmt->fetchAll();
 
     // Group details by tool
     $byTool = [];
@@ -77,7 +158,7 @@ $passRate = $totalTests > 0 ? round(($run['passed'] / $totalTests) * 100, 1) : 0
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QA Test Run Report #<?php echo $runId; ?></title>
+    <title><?php echo htmlspecialchars($reportTitle); ?></title>
     <style>
         :root {
             --blue: #1E88E5;
@@ -459,14 +540,16 @@ $passRate = $totalTests > 0 ? round(($run['passed'] / $totalTests) * 100, 1) : 0
 
     <div class="report">
         <div class="report-header">
-            <h1>QA Test Run Report</h1>
-            <div class="subtitle">Jarir.com Automated Testing Suite</div>
+            <h1><?php echo htmlspecialchars($reportTitle); ?></h1>
+            <div class="subtitle"><?php echo htmlspecialchars($reportSubtitle); ?></div>
 
             <div class="report-meta">
-                <div class="meta-item">
-                    <label>Run ID</label>
-                    <div class="value">#<?php echo $runId; ?></div>
-                </div>
+                <?php if ($runId): ?>
+                    <div class="meta-item">
+                        <label>Run ID</label>
+                        <div class="value">#<?php echo $runId; ?></div>
+                    </div>
+                <?php endif; ?>
                 <div class="meta-item">
                     <label>Date</label>
                     <div class="value"><?php echo date('M j, Y', strtotime($run['run_date'])); ?></div>
