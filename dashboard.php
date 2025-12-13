@@ -59,95 +59,29 @@ if (isset($_GET['api'])) {
   try {
     switch ($action) {
       /* Configs */
-      case 'set-config-profile':
-        require_role(['admin']);
-        $pid = $input['profile_id'] ?? null;
-        // profile_id can be: 'global' (meaning 0 in DB context for query, or set active_profile_id to 0),
-        // or a specific user_id.
-        // Let's store:
-        // NULL = Default Admin View (All)
-        // 0 = Global Only (user_id IS NULL OR 0)
-        // >0 = Specific User
-
-        $val = null;
-        if ($pid === 'global' || $pid === 0 || $pid === '0') {
-          $val = 0;
-        } elseif (is_numeric($pid) && $pid > 0) {
-          $val = (int) $pid;
-        } else {
-          $val = null; // Revert to default
-        }
-
-        $uid = current_user()['id'];
-        $stmt = $db->prepare("UPDATE qa_users SET active_profile_id = ? WHERE id = ?");
-        $stmt->execute([$val, $uid]);
-        echo json_encode(['ok' => true, 'active_profile_id' => $val]);
-        break;
-
       case 'list-configs':
         $user = current_user();
         $uid = $user['id'];
         $role = $user['role'];
-
-        // Check active profile for Admins
-        $activeProfile = null;
-        if ($role === 'admin') {
-          // Re-fetch user to get latest active_profile_id in case session is stale
-          // or just rely on DB check if we didn't store it in session. 
-          // Safest to fetch from DB for the specific filter logic.
-          $uStmt = $db->prepare("SELECT active_profile_id FROM qa_users WHERE id = ?");
-          $uStmt->execute([$uid]);
-          $uRow = $uStmt->fetch();
-          $activeProfile = $uRow ? $uRow['active_profile_id'] : null;
-        }
 
         $sql = "SELECT c.*, u.name as user_name 
                 FROM qa_tool_configs c 
                 LEFT JOIN qa_users u ON c.user_id = u.id ";
 
         $params = [];
-        $where = [];
-
         if ($role !== 'admin') {
           // Testers see: their own configs OR global configs
-          // Ensure we handle NULL or 0 for global
-          $where[] = "(c.user_id = ? OR c.user_id IS NULL OR c.user_id = 0)";
+          $sql .= " WHERE c.user_id=? OR c.user_id IS NULL ";
           $params[] = $uid;
-        } else {
-          // Admin specific logic
-          if ($activeProfile === null) {
-            // Show ALL
-          } elseif ($activeProfile == 0) {
-            // Global Only
-            $where[] = "(c.user_id IS NULL OR c.user_id = 0)";
-          } else {
-            // Impersonate User X + Global
-            $where[] = "(c.user_id = ? OR c.user_id IS NULL OR c.user_id = 0)";
-            $params[] = $activeProfile;
-          }
         }
+        // Admin sees ALL (no WHERE clause needed implies all)
 
-        if (!empty($where)) {
-          $sql .= " WHERE " . implode(' AND ', $where);
-        }
-
-        // Order: Own config first, then Global.
-        // For Admin (Default), maybe User sort?
-        // Let's standardize: If specific user context (Tester or Admin Impersonated), show that user's first.
-
-        // Sorting Logic
-        if ($role !== 'admin' || ($role === 'admin' && $activeProfile > 0)) {
-          // If impersonating or regular tester, sort by "Is My Config" desc
-          // We need to know "My Config ID".
-          // If admin impersonating, "My" is activeProfile.
-          // If tester, "My" is $uid.
-          $targetId = ($role === 'admin' && $activeProfile > 0) ? $activeProfile : $uid;
-
-          // Portable boolean sort
-          $sql .= " ORDER BY CASE WHEN c.user_id = ? THEN 1 ELSE 0 END DESC, c.created_at DESC";
-          $params[] = $targetId; // Add to params for ORDER BY
+        // Order: Own config first (if owner), then Global, then others. 
+        // For admin, maybe just Date DESC? Or maybe group by Tool? 
+        // Let's stick to created_at for Admin, but for tester prioritize their own.
+        if ($role !== 'admin') {
+          $sql .= " ORDER BY (c.user_id IS NOT NULL) DESC, c.created_at DESC";
         } else {
-          // Admin Default or Global View
           $sql .= " ORDER BY c.tool_code ASC, c.created_at DESC";
         }
 
@@ -293,21 +227,6 @@ if (isset($_GET['api'])) {
         break;
 
       /* Profile */
-      case 'get-profile':
-        $u = current_user();
-        // Fetch fresh from DB incase of updates
-        $stmt = $db->prepare("SELECT id, name, email, role, avatar_url, active_profile_id FROM qa_users WHERE id=?");
-        $stmt->execute([$u['id']]);
-        $fresh = $stmt->fetch();
-        if ($fresh) {
-          unset($fresh['password_hash']);
-          echo json_encode($fresh);
-        } else {
-          http_response_code(404);
-          echo json_encode(['error' => 'User not found']);
-        }
-        break;
-
       case 'update-profile':
         $user = current_user();
         $id = $user['id'];
@@ -6240,13 +6159,6 @@ function qa_db(): PDO
   } catch (Exception $e) {
   }
 
-  try {
-    $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'active_profile_id'")->fetchAll();
-    if (count($cols) == 0)
-      $pdo->exec("ALTER TABLE qa_users ADD COLUMN active_profile_id INT NULL DEFAULT NULL AFTER role");
-  } catch (Exception $e) {
-  }
-
   return $pdo;
 }
 
@@ -7172,7 +7084,7 @@ $TOOL_DEFS = [
         </div>
         <!-- Open Issues -->
         <div class="stat-card stat-open" style="border-top: 4px solid #FB8C00; cursor:pointer;"
-          onclick="triggerOpenIssuesReport()">
+          onclick="setRunFilter('failed')">
           <h3>Open Issues</h3>
           <div class="stat-value" id="stat-open">0</div>
           <div class="stat-meta">Total open issues across runs</div>
@@ -7363,17 +7275,6 @@ $TOOL_DEFS = [
               onchange="renderConfigsTable()">
               <option value="">All Owners</option>
             </select>
-            <!-- Admin Profile Selector -->
-            <div id="admin-profile-selector" style="display:none; margin-left:10px; display:inline-block;">
-              <span style="font-size:12px; color:#555; margin-right:4px;">View As:</span>
-              <select id="profile-select" style="font-size:12px; padding:4px 8px; width:140px;">
-                <option value="">Default (All)</option>
-                <option value="global">Global Only</option>
-              </select>
-              <button id="btn-load-profile" class="btn-small btn-secondary"
-                style="padding:2px 8px; font-size:11px;">Load</button>
-              <span id="active-profile-display" style="font-size:11px; margin-left:6px; color:#007BFF;"></span>
-            </div>
           </div>
         </div>
         <table class="table" id="configs-table">
@@ -7525,16 +7426,38 @@ $TOOL_DEFS = [
   </section>
 
   <!-- Report Modal -->
-  <div id="modal-report" class="modal-overlay" style="z-index: 9999;">
+  <div id="modal-report" class="modal-overlay">
     <div class="modal-content"
-      style="width: 90%; max-width: 1200px; height: 90vh; padding:0; overflow:hidden; display:flex; flex-direction:column; background:white;">
-      <div
-        style="background:#1976D2; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; color:white;">
-        <h3 style="margin:0; font-size:18px;">Report Viewer</h3>
-        <button onclick="closeReportModal()"
-          style="background:transparent; border:none; color:white; font-size:24px; cursor:pointer;">&times;</button>
+      style="max-width: 900px; padding:0; overflow:hidden; display:flex; flex-direction:column; max-height:90vh;">
+      <div class="report-header">
+        <div style="display:flex; justify-content:space-between; align-items:start;">
+          <div>
+            <h1 style="margin:0; font-size:24px;">QA Test Run Report</h1>
+            <div class="subtitle" style="opacity:0.9;">Test Execution Details</div>
+          </div>
+          <button class="close-modal type-white" onclick="closeReportModal()"
+            style="background:rgba(255,255,255,0.2); border:none; color:white; font-size:20px; cursor:pointer; width:32px; height:32px; border-radius:50%;">&times;</button>
+        </div>
+        <div class="report-meta" id="rep-meta">
+          <!-- Populated via JS -->
+        </div>
       </div>
-      <iframe id="report-iframe" style="flex:1; border:none; width:100%; height:100%;" src="about:blank"></iframe>
+
+      <div style="padding:24px; overflow-y:auto; flex:1; background:#f4f7fa;">
+        <div class="print-btn-hide" style="text-align:right; margin-bottom:16px;">
+          <button class="btn-primary" onclick="window.print()">Print Report</button>
+        </div>
+
+        <div class="summary-grid" id="rep-summary">
+          <!-- Populated via JS -->
+        </div>
+
+        <div id="rep-notes" class="notes-section" style="display:none; margin-bottom:20px;"></div>
+
+        <div id="rep-content">
+          <!-- Tool Sections go here -->
+        </div>
+      </div>
     </div>
   </div>
 
@@ -8461,81 +8384,18 @@ $TOOL_DEFS = [
       const curUid = curUser.id;
       const isAdmin = (curUser.role === 'admin');
 
-      // Admin Editor Dropdown Logic & Profile Selector
-      if (isAdmin) {
-        // We might need users for both dropdowns
-        // Check if we need to fetch
-        const ownerSel = document.getElementById('cfg-owner');
-        const profileSel = document.getElementById('profile-select');
-        const ownerWrap = document.getElementById('cfg-owner-wrapper');
-
-        // Fetch if we haven't or if lists are empty (users might be global var but let's be safe)
-        // existing code calls api('list-users') local var 'allUsers'
-        let allUsers = [];
-
-        // If either dropdown needs populating
-        const ownerNeeds = (ownerSel && ownerSel.options.length <= 1);
-        const profNeeds = (profileSel && profileSel.options.length <= 2); // Default, Global
-
-        if (ownerNeeds || profNeeds) {
-          allUsers = await api('list-users');
-
-          // Populate Owner Select (Editor)
-          if (ownerNeeds && ownerSel) {
-            allUsers.forEach(u => {
-              const opt = document.createElement('option');
-              opt.value = u.id;
-              opt.innerText = u.name + ' (User)';
-              ownerSel.appendChild(opt);
-            });
-            if (ownerWrap) ownerWrap.style.display = 'block';
-          }
-
-          // Populate Profile View Select
-          if (profNeeds && profileSel) {
-            allUsers.forEach(u => {
-              const opt = document.createElement('option');
-              opt.value = u.id;
-              opt.textContent = u.name + (u.role === 'admin' ? ' (Admin)' : '');
-              profileSel.appendChild(opt);
-            });
-          }
-        }
-
-        // Update Active Profile Display
-        const disp = document.getElementById('active-profile-display');
-        if (disp && profileSel) {
-          const activeId = curUser.active_profile_id;
-          if (activeId === null) {
-            disp.textContent = "Default View";
-            profileSel.value = "";
-          } else if (activeId == 0) {
-            disp.textContent = "Global Only";
-            profileSel.value = "global";
-          } else {
-            const found = (allUsers.length ? allUsers : await api('list-users')).find(u => u.id == activeId);
-            disp.textContent = found ? "User: " + found.name : "User ID " + activeId;
-            profileSel.value = activeId;
-          }
-        }
-
-        // Attach Listener for Load Button
-        const btnLoad = document.getElementById('btn-load-profile');
-        if (btnLoad && !btnLoad.hasAttribute('data-listening')) {
-          btnLoad.setAttribute('data-listening', 'true');
-          btnLoad.addEventListener('click', async () => {
-            const val = profileSel.value;
-            try {
-              const res = await api('set-config-profile', { profile_id: val });
-              if (res.ok) {
-                await loadConfigs(); // Reload
-              }
-            } catch (e) { console.error(e); }
-          });
-          // Show selector
-          const selContainer = document.getElementById('admin-profile-selector');
-          if (selContainer) selContainer.style.display = 'inline-block';
-        }
+      // Admin Editor Dropdown Logic
+      const ownerSel = document.getElementById('cfg-owner');
+      const ownerWrap = document.getElementById('cfg-owner-wrapper');
+      if (isAdmin && ownerSel && ownerSel.options.length <= 1) {
+        const allUsers = await api('list-users');
+        allUsers.forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.id;
+          opt.innerText = u.name + ' (User)';
+          ownerSel.appendChild(opt);
+        });
+        ownerWrap.style.display = 'block';
       }
 
       // Filter Logic
@@ -8970,39 +8830,24 @@ $TOOL_DEFS = [
     });
 
     /* Report Modal Logic */
-    /* Report Modal Logic (Iframe Based) */
-    window.triggerOpenIssuesReport = function () {
-      console.log('triggerOpenIssuesReport called');
-      const userId = document.getElementById('filter-user') ? document.getElementById('filter-user').value : '';
-      const params = new URLSearchParams({
-        user_id: userId,
-        status: 'failed'
-      });
-      openReportModal('qa_run_report.php?' + params.toString());
-    };
-
-    function openReportModal(target) {
+    async function openReportModal(runId) {
       const modal = document.getElementById('modal-report');
-      const iframe = document.getElementById('report-iframe');
-      if (!modal || !iframe) return;
+      if (!modal) return;
 
-      let url = 'about:blank';
-      if (typeof target === 'string' && (target.startsWith('http') || target.includes('.php'))) {
-        url = target;
-      } else {
-        // Assume it's a Run ID
-        url = 'qa_run_report.php?run_id=' + target;
-      }
-
-      iframe.src = url;
       modal.classList.add('active');
+      document.getElementById('rep-content').innerHTML = '<div style="text-align:center; padding:20px;">Loading Report...</div>';
+
+      // Reuse loaded RUNS if possible
+      let run = RUNS.find(r => r.id == runId);
+
+      // Fetch Details
+      const details = await api('run-details', { id: runId });
+
+      renderReport(run, details);
     }
 
     function closeReportModal() {
-      const modal = document.getElementById('modal-report');
-      const iframe = document.getElementById('report-iframe');
-      if (modal) modal.classList.remove('active');
-      if (iframe) iframe.src = 'about:blank';
+      document.getElementById('modal-report').classList.remove('active');
     }
 
     function renderReport(run, details) {
