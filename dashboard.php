@@ -8138,7 +8138,7 @@ $TOOL_DEFS = [
       <td>${r.open_issues}</td>
       <td>${r.notes ? r.notes : ''}</td>
       <td class="table-actions"><button data-action="delete">Delete</button></td>
-      <td><a href="qa_run_report.php?run_id=${r.id}" target="_blank" class="btn-small btn-secondary">Report</a></td>`;
+      <td><button class="btn-small btn-secondary" onclick="openReportModal(${r.id})">Report</button></td>`;
         tbody.appendChild(tr);
       });
       // Reset bulk selection UI when re-rendering
