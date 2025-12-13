@@ -104,10 +104,17 @@ if (isset($_GET['api'])) {
         // Check for active profile (Admins only)
         $activeProfile = null;
         if ($role === 'admin') {
-          // Fetch fresh user data to get active_profile
-          $stmt = $db->prepare("SELECT active_profile_id FROM qa_users WHERE id = ?");
-          $stmt->execute([$uid]);
-          $activeProfile = $stmt->fetchColumn();
+          try {
+            // Attempt to fetch. If column doesn't exist, this might fail (depending on PDO driver mode).
+            // To be safe, we can check columns or just catch exception.
+            $stmt = $db->prepare("SELECT active_profile_id FROM qa_users WHERE id = ?");
+            $stmt->execute([$uid]);
+            $activeProfile = $stmt->fetchColumn();
+          } catch (Exception $e) {
+            // Column likely missing. Treat as Default. 
+            // Optionally auto-migrate here if critical, or wait for set-profile to do it.
+            $activeProfile = null;
+          }
         }
 
         $sql = "SELECT c.*, u.name as user_name 
@@ -119,26 +126,22 @@ if (isset($_GET['api'])) {
         if ($role === 'admin' && $activeProfile !== null && $activeProfile !== false) {
           // ADMIN WITH ACTIVE PROFILE
           if ($activeProfile == 0) {
-            // Global Only
-            $sql .= " WHERE c.user_id IS NULL ";
+            // Global Only (NULL or 0)
+            $sql .= " WHERE (c.user_id IS NULL OR c.user_id = 0) ";
           } else {
-            // Specific User (plus Global usually? User request says "Test Runs will use the loaded configuration". 
-            // Usually if I load User X, I want to see User X's configs.
-            // Let's show User X + Global, just like User X would see.
-            $sql .= " WHERE c.user_id=? OR c.user_id IS NULL ";
+            // Specific User + Global
+            $sql .= " WHERE (c.user_id=? OR c.user_id IS NULL OR c.user_id = 0) ";
             $params[] = $activeProfile;
           }
-
-          // Emulate Tester Sort order
-          $sql .= " ORDER BY (c.user_id IS NOT NULL) DESC, c.created_at DESC";
+          $sql .= " ORDER BY (c.user_id IS NOT NULL AND c.user_id != 0) DESC, c.created_at DESC";
 
         } elseif ($role !== 'admin') {
           // Normal Tester: Own + Global
-          $sql .= " WHERE c.user_id=? OR c.user_id IS NULL ";
+          $sql .= " WHERE (c.user_id=? OR c.user_id IS NULL OR c.user_id = 0) ";
           $params[] = $uid;
-          $sql .= " ORDER BY (c.user_id IS NOT NULL) DESC, c.created_at DESC";
+          $sql .= " ORDER BY (c.user_id IS NOT NULL AND c.user_id != 0) DESC, c.created_at DESC";
         } else {
-          // Normal Admin (No profile): See ALL
+          // Normal Admin: See ALL
           $sql .= " ORDER BY c.tool_code ASC, c.created_at DESC";
         }
 
