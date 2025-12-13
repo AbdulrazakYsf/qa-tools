@@ -6471,6 +6471,212 @@ $TOOL_DEFS = [
       cursor: pointer;
     }
 
+    /* Report Modal Styles */
+    .report-header {
+      background: linear-gradient(135deg, #1a3a57 0%, #1E88E5 100%);
+      color: #fff;
+      padding: 24px 32px;
+    }
+
+    .report-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-top: 16px;
+    }
+
+    .meta-item {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 8px 16px;
+    }
+
+    .meta-item label {
+      display: block;
+      font-size: 10px;
+      text-transform: uppercase;
+      opacity: 0.8;
+      margin-bottom: 2px;
+      color: white !important;
+    }
+
+    .meta-item .value {
+      font-size: 16px;
+      font-weight: 700;
+      color: white;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .summary-card {
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+      border: 1px solid #e2e8f0;
+    }
+
+    .summary-card h3 {
+      margin: 0 0 4px;
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #607D8B;
+    }
+
+    .summary-card .value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #37474f;
+    }
+
+    .summary-card.passed .value {
+      color: var(--success);
+    }
+
+    .summary-card.failed .value {
+      color: var(--danger);
+    }
+
+    .summary-card.open .value {
+      color: #FB8C00;
+    }
+
+    .summary-card.rate .value {
+      color: var(--secondary);
+    }
+
+    .tool-section {
+      margin-bottom: 20px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .tool-header {
+      background: #f1f5f9;
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .tool-header h3 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: #37474f;
+    }
+
+    .tool-stats {
+      display: flex;
+      gap: 8px;
+      font-size: 11px;
+    }
+
+    .tool-stats span {
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .tool-stats .passed {
+      background: #e8f5e9;
+      color: var(--success);
+    }
+
+    .tool-stats .failed {
+      background: #ffebee;
+      color: var(--danger);
+    }
+
+    .tool-stats .warn {
+      background: #fff3e0;
+      color: #FB8C00;
+    }
+
+    .detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .detail-table th,
+    .detail-table td {
+      padding: 8px 12px;
+      text-align: left;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .detail-table th {
+      background: #f8fafc;
+      font-weight: 600;
+      color: #546e7a;
+    }
+
+    .detail-table .mini-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      color: white;
+    }
+
+    .mini-badge.ok {
+      background: var(--success);
+    }
+
+    .mini-badge.warn {
+      background: #FB8C00;
+    }
+
+    .mini-badge.fail {
+      background: var(--danger);
+    }
+
+    .url-cell {
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: monospace;
+    }
+
+    @media print {
+      .modal-content {
+        position: static;
+        width: 100%;
+        height: auto;
+        border: none;
+        box-shadow: none;
+      }
+
+      .modal-overlay {
+        position: static;
+        background: white;
+        padding: 0;
+      }
+
+      .close-modal,
+      .print-btn-hide {
+        display: none !important;
+      }
+
+      body>*:not(#modal-report) {
+        display: none;
+      }
+
+      #modal-report {
+        display: block !important;
+        position: static;
+        z-index: 9999;
+      }
+    }
+
     .btn-primary {
       background: var(--blue);
       color: #fff;
@@ -7218,6 +7424,42 @@ $TOOL_DEFS = [
       </div>
     </div>
   </section>
+
+  <!-- Report Modal -->
+  <div id="modal-report" class="modal-overlay">
+    <div class="modal-content"
+      style="max-width: 900px; padding:0; overflow:hidden; display:flex; flex-direction:column; max-height:90vh;">
+      <div class="report-header">
+        <div style="display:flex; justify-content:space-between; align-items:start;">
+          <div>
+            <h1 style="margin:0; font-size:24px;">QA Test Run Report</h1>
+            <div class="subtitle" style="opacity:0.9;">Test Execution Details</div>
+          </div>
+          <button class="close-modal type-white" onclick="closeReportModal()"
+            style="background:rgba(255,255,255,0.2); border:none; color:white; font-size:20px; cursor:pointer; width:32px; height:32px; border-radius:50%;">&times;</button>
+        </div>
+        <div class="report-meta" id="rep-meta">
+          <!-- Populated via JS -->
+        </div>
+      </div>
+
+      <div style="padding:24px; overflow-y:auto; flex:1; background:#f4f7fa;">
+        <div class="print-btn-hide" style="text-align:right; margin-bottom:16px;">
+          <button class="btn-primary" onclick="window.print()">Print Report</button>
+        </div>
+
+        <div class="summary-grid" id="rep-summary">
+          <!-- Populated via JS -->
+        </div>
+
+        <div id="rep-notes" class="notes-section" style="display:none; margin-bottom:20px;"></div>
+
+        <div id="rep-content">
+          <!-- Tool Sections go here -->
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- PROFILE MODAL -->
   <div class="modal-overlay" id="profile-modal">
@@ -8586,6 +8828,129 @@ $TOOL_DEFS = [
         alert('Error: ' + (res.error || 'Unknown'));
       }
     });
+
+    /* Report Modal Logic */
+    async function openReportModal(runId) {
+      const modal = document.getElementById('modal-report');
+      if (!modal) return;
+
+      modal.classList.add('active');
+      document.getElementById('rep-content').innerHTML = '<div style="text-align:center; padding:20px;">Loading Report...</div>';
+
+      // Reuse loaded RUNS if possible
+      let run = RUNS.find(r => r.id == runId);
+
+      // Fetch Details
+      const details = await api('run-details', { id: runId });
+
+      renderReport(run, details);
+    }
+
+    function closeReportModal() {
+      document.getElementById('modal-report').classList.remove('active');
+    }
+
+    function renderReport(run, details) {
+      if (!run) return;
+
+      // META
+      const date = new Date(run.run_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const time = new Date(run.run_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+      const metaHtml = `
+            <div class="meta-item"><label>Run ID</label><div class="value">#${run.id}</div></div>
+            <div class="meta-item"><label>Date & Time</label><div class="value">${date} at ${time}</div></div>
+            <div class="meta-item"><label>Status</label><div class="value" style="text-transform:capitalize;">${run.status}</div></div>
+        `;
+      document.getElementById('rep-meta').innerHTML = metaHtml;
+
+      // SUMMARY
+      const total = run.total_tests;
+      const pass = run.passed;
+      const fail = run.failed;
+      const open = run.open_issues;
+      const rate = total > 0 ? Math.round((pass / total) * 100) : 0;
+
+      const sumHtml = `
+            <div class="summary-card"><h3>Total Tests</h3><div class="value">${total}</div></div>
+            <div class="summary-card passed"><h3>Passed</h3><div class="value">${pass}</div></div>
+            <div class="summary-card failed"><h3>Failed</h3><div class="value">${fail}</div></div>
+            <div class="summary-card open"><h3>Open Issues</h3><div class="value">${open}</div></div>
+            <div class="summary-card rate"><h3>Pass Rate</h3><div class="value">${rate}%</div></div>
+        `;
+      document.getElementById('rep-summary').innerHTML = sumHtml;
+
+      // NOTES
+      const notesDiv = document.getElementById('rep-notes');
+      if (run.notes) {
+        notesDiv.innerHTML = `<h3>Run Notes</h3><p>${run.notes}</p>`;
+        notesDiv.style.display = 'block';
+      } else {
+        notesDiv.style.display = 'none';
+      }
+
+      // DETAILS
+      const contentDiv = document.getElementById('rep-content');
+      if (!details || details.length === 0) {
+        contentDiv.innerHTML = '<p style="text-align:center; color:#777;">No detailed results recorded for this run.</p>';
+        return;
+      }
+
+      // Group by Tool
+      const byTool = {};
+      details.forEach(row => {
+        const t = row.tool_code || 'unknown';
+        if (!byTool[t]) byTool[t] = { passed: 0, failed: 0, warn: 0, rows: [] };
+        byTool[t].rows.push(row);
+
+        const s = row.status.toUpperCase();
+        if (['OK', 'PASS', 'PASSED', 'SUCCESS', 'VALID', 'IN STOCK'].includes(s)) byTool[t].passed++;
+        else if (['WARN', 'WARNING'].includes(s)) byTool[t].warn++;
+        else byTool[t].failed++;
+      });
+
+      let html = '';
+      for (const [code, stat] of Object.entries(byTool)) {
+        // Stats Badges
+        let statsHtml = '';
+        if (stat.passed > 0) statsHtml += `<span class="passed">${stat.passed} passed</span> `;
+        if (stat.failed > 0) statsHtml += `<span class="failed">${stat.failed} failed</span> `;
+        if (stat.warn > 0) statsHtml += `<span class="warn">${stat.warn} warnings</span> `;
+
+        // Rows
+        let rowsHtml = '';
+        stat.rows.forEach(r => {
+          const s = r.status.toUpperCase();
+          let badge = 'fail';
+          if (['OK', 'PASS', 'PASSED', 'SUCCESS', 'VALID', 'IN STOCK'].includes(s)) badge = 'ok';
+          else if (['WARN', 'WARNING'].includes(s)) badge = 'warn';
+
+          rowsHtml += `
+                    <tr>
+                       <td style="width:80px;"><span class="mini-badge ${badge}">${r.status}</span></td>
+                       <td class="url-cell" title="${r.url}">${r.url || '-'}</td>
+                       <td>${r.parent || '-'}</td>
+                    </tr>
+                 `;
+        });
+
+        html += `
+                <div class="tool-section">
+                   <div class="tool-header">
+                      <h3>${code.toUpperCase().replace(/_/g, ' ')}</h3>
+                      <div class="tool-stats">${statsHtml}</div>
+                   </div>
+                   <table class="detail-table">
+                      <thead>
+                         <tr><th>Status</th><th>URL/Item</th><th>Parent/Source</th></tr>
+                      </thead>
+                      <tbody>${rowsHtml}</tbody>
+                   </table>
+                </div>
+             `;
+      }
+      contentDiv.innerHTML = html;
+    }
 
     /* Initial */
     Promise.all([loadConfigs(), loadUsers(), loadRuns(), loadStats()])
