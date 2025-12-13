@@ -479,6 +479,72 @@ if (isset($_GET['api'])) {
         echo json_encode(['total_runs' => $total, 'passed' => $passed, 'failed' => $failed, 'open_issues' => $open]);
         break;
 
+      /* Execution Configs (Admin Only) */
+      case 'set-execution-config':
+        require_role(['admin']);
+        $user = current_user();
+        $adminId = $user['id'];
+        $profileId = $input['profile_id'] ?? null; // If null/empty -> Default (Global) which implies we clear specific tag
+
+        // 1. Clear previous tags for this admin (reset)
+        // We set admin_user_id = NULL where it matches current admin
+        $stmt = $db->prepare("UPDATE qa_tool_configs SET admin_user_id = NULL WHERE admin_user_id = ?");
+        $stmt->execute([$adminId]);
+
+        // 2. If profileId is provided, tag the matching configs
+        if ($profileId) {
+          if ($profileId === 'global') {
+            // Tag all GLOBAL configs (user_id IS NULL)
+            $stmt = $db->prepare("UPDATE qa_tool_configs SET admin_user_id = ? WHERE user_id IS NULL");
+            $stmt->execute([$adminId]);
+          } else {
+            // Tag all configs belonging to specific user
+            $targetUid = (int) $profileId;
+            $stmt = $db->prepare("UPDATE qa_tool_configs SET admin_user_id = ? WHERE user_id = ?");
+            $stmt->execute([$adminId, $targetUid]);
+          }
+        }
+        // If profileId is empty/null, we just leave it cleared (default behavior)
+
+        echo json_encode(['ok' => true]);
+        break;
+
+      case 'get-execution-configs':
+        // logic: if admin, check for admin_user_id tagged items.
+        // if found, return them.
+        // if not found, return default global items (user_id IS NULL).
+        $user = current_user();
+        $uid = $user['id'];
+        $role = $user['role'];
+
+        // For testers, it's simple: their own + global.
+        // But the requirement specifically modifies "Run All" behavior for Admin.
+
+        if ($role === 'admin') {
+          // Admin logic
+          $stmt = $db->prepare("SELECT * FROM qa_tool_configs WHERE admin_user_id = ?");
+          $stmt->execute([$uid]);
+          $tagged = $stmt->fetchAll();
+
+          if (count($tagged) > 0) {
+            echo json_encode($tagged); // Return tagged preference
+          } else {
+            // Fallback to Global Defaults (user_id IS NULL)
+            $stmt = $db->query("SELECT * FROM qa_tool_configs WHERE user_id IS NULL");
+            echo json_encode($stmt->fetchAll());
+          }
+        } else {
+          // Tester logic (unchanged relative to Run All? User said "Testers configuration loading remains unchanged")
+          // Testers usually run their own configs or global.
+          // Let's return their own + global, same as list-configs but strictly for execution?
+          // Actually, let's mirror list-configs logic for testers to be safe.
+          $stmt = $db->prepare("SELECT * FROM qa_tool_configs WHERE user_id=? OR user_id IS NULL");
+          $stmt->execute([$uid]);
+          echo json_encode($stmt->fetchAll());
+        }
+        break;
+
+
       default:
         http_response_code(404);
         echo json_encode(['error' => 'Unknown api']);
@@ -6159,6 +6225,13 @@ function qa_db(): PDO
   } catch (Exception $e) {
   }
 
+  try {
+    $cols = $pdo->query("SHOW COLUMNS FROM qa_tool_configs LIKE 'admin_user_id'")->fetchAll();
+    if (count($cols) == 0)
+      $pdo->exec("ALTER TABLE qa_tool_configs ADD COLUMN admin_user_id INT UNSIGNED NULL AFTER user_id");
+  } catch (Exception $e) {
+  }
+
   return $pdo;
 }
 
@@ -7228,9 +7301,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                    </option>
+                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                  </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -7270,94 +7343,99 @@ $TOOL_DEFS = [
             <h2>Existing Configurations</h2>
             <small>Reference only – open tool and copy values manually.</small>
           </div>
-          <div>
+          <divstyle="display:flex; gap:8px; align-items:center;">
+            <button id="btn-load-execution-config" class="btn-small box-btn"
+              style="display:none; font-size:11px; background:#673ab7; color:white; border:none; padding:4px 10px; border-radius:4px;">
+              Load Configuration
+            </button>
             <select id="filter-config-owner" class="form-control" style="font-size:12px; padding:4px 8px; width:140px;"
               onchange="renderConfigsTable()">
               <option value="">All Owners</option>
             </select>
-          </div>
         </div>
-        <table class="table" id="configs-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Name</th>
-              <th>Owner</th>
-              <th>Tool</th>
-              <th>Enabled</th>
-              <th>Snippet</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
       </div>
-    </section>
+  </div>
+  <table class="table" id="configs-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Owner</th>
+        <th>Tool</th>
+        <th>Enabled</th>
+        <th>Snippet</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  </div>
+  </section>
 
-    <!-- USERS TAB -->
-    <section id="tab-users" class="tab-content">
-      <div class="section-card">
-        <div class="section-header">
-          <h2>User Management</h2>
-          <small>Metadata only (no auth).</small>
-        </div>
-        <form id="user-form">
-          <input type="hidden" id="user-id">
-          <div class="form-grid">
-            <div class="form-field">
-              <label>Name</label>
-              <input type="text" id="user-name" placeholder="Tester name">
-            </div>
-            <div class="form-field">
-              <label>Email</label>
-              <input type="email" id="user-email" placeholder="tester@jarir.com">
-            </div>
-            <div class="form-field">
-              <label>Password (Leave blank to keep current)</label>
-              <input type="password" id="user-password" placeholder="New Password">
-            </div>
-            <div class="form-field">
-              <label>Role</label>
-              <select id="user-role">
-                <option value="tester">Tester</option>
-                <option value="admin">Admin</option>
-                <option value="viewer">Viewer</option>
-              </select>
-            </div>
-            <div class="form-field">
-              <label>Status</label>
-              <div class="checkbox-row">
-                <label><input type="checkbox" id="user-active" checked> Active</label>
-              </div>
-            </div>
-          </div>
-          <div class="actions-row">
-            <button type="button" class="btn-primary" id="user-save-btn">Save User</button>
-            <button type="button" class="btn-ghost" id="user-reset-btn">Reset</button>
-          </div>
-        </form>
+  <!-- USERS TAB -->
+  <section id="tab-users" class="tab-content">
+    <div class="section-card">
+      <div class="section-header">
+        <h2>User Management</h2>
+        <small>Metadata only (no auth).</small>
       </div>
+      <form id="user-form">
+        <input type="hidden" id="user-id">
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Name</label>
+            <input type="text" id="user-name" placeholder="Tester name">
+          </div>
+          <div class="form-field">
+            <label>Email</label>
+            <input type="email" id="user-email" placeholder="tester@jarir.com">
+          </div>
+          <div class="form-field">
+            <label>Password (Leave blank to keep current)</label>
+            <input type="password" id="user-password" placeholder="New Password">
+          </div>
+          <div class="form-field">
+            <label>Role</label>
+            <select id="user-role">
+              <option value="tester">Tester</option>
+              <option value="admin">Admin</option>
+              <option value="viewer">Viewer</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Status</label>
+            <div class="checkbox-row">
+              <label><input type="checkbox" id="user-active" checked> Active</label>
+            </div>
+          </div>
+        </div>
+        <div class="actions-row">
+          <button type="button" class="btn-primary" id="user-save-btn">Save User</button>
+          <button type="button" class="btn-ghost" id="user-reset-btn">Reset</button>
+        </div>
+      </form>
+    </div>
 
-      <div class="section-card" style="margin-top:16px;">
-        <div class="section-header">
-          <h2>Existing Users</h2>
-          <small>Assign testers to runs manually in notes.</small>
-        </div>
-        <table class="table" id="users-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+    <div class="section-card" style="margin-top:16px;">
+      <div class="section-header">
+        <h2>Existing Users</h2>
+        <small>Assign testers to runs manually in notes.</small>
       </div>
-    </section>
+      <table class="table" id="users-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
   </div>
 
   <!-- CONSOLE OVERLAY (Focus Mode) -->
@@ -7427,10 +7505,13 @@ $TOOL_DEFS = [
 
   <!-- Report Modal (Iframe) -->
   <div id="modal-report" class="modal-overlay">
-    <div class="modal-content" style="width:95%; max-width:1200px; height:90vh; padding:0; display:flex; flex-direction:column; background:#fff;">
-      <div style="padding:10px 15px; background:#f4f7fa; border-bottom:1px solid #ddd; display:flex; justify-content:space-between; align-items:center;">
-          <h2 style="margin:0; font-size:18px; color:#333;">Detailed Report</h2>
-          <button onclick="closeReportModal()" style="background:transparent; border:none; font-size:24px; color:#555; cursor:pointer;">&times;</button>
+    <div class="modal-content"
+      style="width:95%; max-width:1200px; height:90vh; padding:0; display:flex; flex-direction:column; background:#fff;">
+      <div
+        style="padding:10px 15px; background:#f4f7fa; border-bottom:1px solid #ddd; display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="margin:0; font-size:18px; color:#333;">Detailed Report</h2>
+        <button onclick="closeReportModal()"
+          style="background:transparent; border:none; font-size:24px; color:#555; cursor:pointer;">&times;</button>
       </div>
       <iframe id="report-iframe" src="about:blank" style="flex:1; border:none; width:100%; height:100%;"></iframe>
     </div>
@@ -7951,11 +8032,18 @@ $TOOL_DEFS = [
       let totalTests = 0, totalPassed = 0, totalFailed = 0, totalOpen = 0;
       const allDetails = [];
 
+      // FETCH EXECUTION CONFIGS (Priority: Admin Tagged -> Global)
+      let execConfigs = [];
+      try {
+        execConfigs = await api('get-execution-configs');
+      } catch (e) { console.error('Failed to fetch exec configs', e); }
+      if (!Array.isArray(execConfigs)) execConfigs = [];
+
       for (const code of selectedCodes) {
         logToConsole(`Preparing ${code}...`, 'info');
 
         // Check Config
-        const cfg = CONFIGS.find(c => c.tool_code === code && c.is_enabled == 1);
+        const cfg = execConfigs.find(c => c.tool_code === code && c.is_enabled == 1);
 
         // Validate Input existence
         let inputsValid = false;
@@ -7968,14 +8056,14 @@ $TOOL_DEFS = [
         }
 
         if (!cfg || !inputsValid) {
-          logToConsole(`SKIPPED ${code}: Missing or empty configuration inputs.`, 'error');
+          logToConsole(`SKIPPED ${code}: No valid configuration loaded (Owner: ${cfg?.user_id || 'Global'}).`, 'error');
           totalFailed++;
           totalOpen++;
           continue;
         }
 
         try {
-          logToConsole(`Running ${code}...`, 'info');
+          logToConsole(`Running ${code}... (Using Config ID: ${cfg.id})`, 'info');
           const result = await runToolWithConfig(code, cfg);
           totalTests += result.tests || 0;
           totalPassed += result.passed || 0;
@@ -8376,6 +8464,17 @@ $TOOL_DEFS = [
       // Filter Logic
       const filterVal = document.getElementById('filter-config-owner') ? document.getElementById('filter-config-owner').value : '';
 
+      // Update Load Button Visibility
+      const btnLoad = document.getElementById('btn-load-execution-config');
+      if (btnLoad) {
+        // Show if Admin AND selection is not "All" (empty)
+        if (isAdmin && filterVal !== '') {
+          btnLoad.style.display = 'inline-block';
+        } else {
+          btnLoad.style.display = 'none';
+        }
+      }
+
       const tbody = document.querySelector('#configs-table tbody');
       tbody.innerHTML = '';
 
@@ -8497,6 +8596,31 @@ $TOOL_DEFS = [
       document.getElementById('cfg-enabled').checked = true;
       await loadConfigs();
     });
+
+    // Load Execution Config Listener
+    const btnLoadExec = document.getElementById('btn-load-execution-config');
+    if(btnLoadExec) {
+       btnLoadExec.addEventListener('click', async () => {
+          const sel = document.getElementById('filter-config-owner');
+          const val = sel.value; 
+          if(!val) return; 
+          
+          const btn = btnLoadExec;
+          const origMap = btn.innerHTML;
+          btn.innerHTML = 'Loading...';
+          btn.disabled = true;
+
+          try {
+             await api('set-execution-config', { profile_id: val });
+             alert('Configuration successfully loaded for "Run All Tests".');
+          } catch(e) {
+             alert('Failed to set configuration: '+e.message);
+          } finally {
+             btn.innerHTML = origMap;
+             btn.disabled = false;
+          }
+       });
+    }
 
     document.getElementById('cfg-reset-btn').addEventListener('click', () => {
       document.getElementById('config-form').reset();
@@ -8834,13 +8958,13 @@ $TOOL_DEFS = [
       if (iframe) iframe.src = 'about:blank';
     }
 
-    window.triggerOpenIssuesReport = function() {
-       const userFilter = document.getElementById('filter-user');
-       let url = 'qa_run_report.php?status=failed';
-       if (userFilter && userFilter.value) {
-           url += '&user_id=' + encodeURIComponent(userFilter.value);
-       }
-       openReportModal(url);
+    window.triggerOpenIssuesReport = function () {
+      const userFilter = document.getElementById('filter-user');
+      let url = 'qa_run_report.php?status=failed';
+      if (userFilter && userFilter.value) {
+        url += '&user_id=' + encodeURIComponent(userFilter.value);
+      }
+      openReportModal(url);
     };
 
     /* Initial */

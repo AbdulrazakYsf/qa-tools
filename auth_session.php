@@ -106,6 +106,16 @@ function get_db_auth()
     } catch (Exception $e) {
     }
 
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM qa_tool_configs LIKE 'admin_user_id'")->fetchAll();
+        if (count($cols) == 0) {
+            $pdo->exec("ALTER TABLE qa_tool_configs ADD COLUMN admin_user_id INT UNSIGNED DEFAULT NULL AFTER user_id");
+            $pdo->exec("CREATE INDEX idx_config_admin ON qa_tool_configs(admin_user_id)");
+        }
+    } catch (Exception $e) {
+    }
+
+
     return $pdo;
 }
 
