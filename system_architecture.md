@@ -28,10 +28,11 @@ The system relies on a relational schema for persistence:
     *   Columns: `user_id`, `subject`, `message`, `is_read`, `admin_reply`, `reply_at`.
 
 ### 3. Support & Reply System
-A fully integrated ticketing system:
-*   **Users**: Can send messages via "Contact Support". View history in "**My Tickets**".
-*   **Admins**: View "Support Center" with **Inbox**. Can reply to messages.
-*   **Notification**: Admins see a "Red Badge" count for unread messages.
+A fully integrated ticketing system with **threaded messaging**:
+*   **Users**: Can send tickets and reply to threads. Interface shows distinct bubbles (Left/White).
+*   **Admins**: Manage tickets via "Support Center". Replies appear on the Right (Blue).
+*   **Data Model**: Single-table storage (`qa_support_messages`). Replies are concatenated with separators and parsed at runtime.
+*   **Notifications**: 3-state logic (`0`=AdminUnread, `1`=UserUnread, `2`=Read) ensures badges clear correctly for both parties.
 
 ### 4. Client-Side Architecture (JS)
 *   **Tools**: Each tool runs in an isolated `iframe`.

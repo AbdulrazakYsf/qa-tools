@@ -9,6 +9,7 @@ A modular, scalable QA testing system for Jarir.com with 13 embedded testing too
 - **Configuration Management**: Save and manage test configurations for each tool
 - **Test Run Logging**: Track all test runs with detailed results
 - **Reporting**: Generate detailed PDF-style reports for each run
+- **Support Center**: Integrated ticketing system with threaded messaging, admin/user roles, and real-time notifications.
 - **User Management**: Manage testers and their roles
 
 ## File Structure
@@ -158,4 +159,4 @@ Internal use only - Jarir.com QA Team
 ## Version History
 
 - **v2.0.0** - Fixed Run All Tests, modular architecture, improved reporting
-- **v1.0.0** - Initial release with 13 tools
+- **v1.0.0** - Stable Release: Support Section Overhaul (Threading, UI Polish, Notifications), 13 Tools.
