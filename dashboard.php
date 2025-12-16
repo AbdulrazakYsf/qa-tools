@@ -7633,7 +7633,7 @@ $TOOL_DEFS = [
           document.getElementById('select-all-runs').checked = false;
           updateBulkAction();
         } catch (e) {
-      alert('Error deleting runs: ' + e.message);
+  alert('Error deleting runs: ' + e.message);
     }
       }
     </script>
@@ -9142,6 +9142,10 @@ $TOOL_DEFS = [
       // New Ticket Button - User only
       const userActions = document.getElementById('supp-user-actions');
       if(userActions) userActions.style.display = (SUPP_ROLE === 'admin') ? 'none' : 'block';
+
+      // Chat Actions (Quick Reply) - Admin only
+      const chatActions = document.querySelector('.chat-actions');
+      if(chatActions) chatActions.style.display = (SUPP_ROLE === 'admin') ? 'flex' : 'none';
     }
 
     // Load Tickets (Unified function for both roles for now, filtering handled by API/Mock)
@@ -9306,13 +9310,15 @@ $TOOL_DEFS = [
           
           // Example: "\n\n--- Admin Reply ---\nhello" -> ["", "Admin", "hello"]
           
+          
           for (let i = 1; i < parts.length; i += 2) {
-             const role = parts[i]; // 'Admin' or 'User'
+             const role = parts[i].trim(); // 'Admin' or 'User'
              const rawMsg = parts[i+1]; 
              if(!rawMsg) continue;
              
              const msgDiv = document.createElement('div');
-             const isAgent = (role === 'Admin'); // Admin = Right/Blue
+             // Explicit check
+             const isAgent = (role === 'Admin'); 
              
              msgDiv.className = isAgent ? 'msg-bubble msg-agent' : 'msg-bubble msg-user';
              msgDiv.innerHTML = `
