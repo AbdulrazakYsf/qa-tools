@@ -508,6 +508,20 @@ if (isset($_GET['api'])) {
           $params[] = $targetUid;
         }
 
+        // Filters
+        $statusFilter = $input['status'] ?? null;
+        $toolFilter = $input['tool'] ?? null;
+
+        if ($statusFilter) {
+          $where .= " AND status = ?";
+          $params[] = $statusFilter;
+        }
+        if ($toolFilter) {
+          // tools column is comma separated e.g. "cms,login"
+          $where .= " AND tools LIKE ?";
+          $params[] = "%$toolFilter%";
+        }
+
         // Helper for stats
         $getStat = function ($sql, $p) use ($db) {
           $s = $db->prepare($sql);
@@ -533,7 +547,6 @@ if (isset($_GET['api'])) {
         }
 
         // 2. Utilized Tools (Distinct tool_code from results linked to these runs)
-        // Need join
         $sqlTools = "
             SELECT COUNT(DISTINCT res.tool_code) as c 
             FROM qa_run_results res
@@ -544,13 +557,29 @@ if (isset($_GET['api'])) {
         $tQuery->execute($params);
         $utilized = (int) $tQuery->fetch()['c'];
 
+        // 3. Tool Breakdown (Pass vs Fail)
+        $sqlBreakdown = "
+            SELECT 
+                res.tool_code,
+                SUM(CASE WHEN UPPER(res.status) IN ('OK','VALID','SUCCESS','IN STOCK') THEN 1 ELSE 0 END) as p,
+                SUM(CASE WHEN UPPER(res.status) NOT IN ('OK','VALID','SUCCESS','IN STOCK') THEN 1 ELSE 0 END) as f
+            FROM qa_run_results res
+            INNER JOIN qa_test_runs tr ON res.run_id = tr.id
+            $where
+            GROUP BY res.tool_code
+        ";
+        $bQuery = $db->prepare($sqlBreakdown);
+        $bQuery->execute($params);
+        $toolStats = $bQuery->fetchAll(PDO::FETCH_ASSOC);
+
         echo json_encode([
           'total_runs' => $total,
           'passed' => $passed,
           'failed' => $failed,
           'open_issues' => $open,
           'pass_rate' => $passRate,
-          'utilized_tools' => $utilized
+          'utilized_tools' => $utilized,
+          'tool_stats' => $toolStats
         ]);
         break;
 
@@ -8077,23 +8106,13 @@ $TOOL_DEFS = [
       const listToUse = runList || RUNS;
       const agg = computeRunAggregates(listToUse);
 
+      /* Old Pass/Fail Pie Chart Removed - Now Handled by loadStats with server data */
       const passFailCanvas = document.getElementById('chart-pass-fail');
-      if (passFailCanvas) {
-        const totalForPie = agg.passed + agg.failed + agg.open;
-        const data = totalForPie > 0 ? [agg.passed, agg.failed, agg.open] : [0, 0, 0];
-        if (chartPassFail) chartPassFail.destroy();
-        chartPassFail = new Chart(passFailCanvas.getContext('2d'), {
-          type: 'doughnut',
-          data: {
-            labels: ['Passed tests', 'Failed tests', 'Open issues'],
-            datasets: [{ data }]
-          },
-          options: {
-            plugins: { legend: { display: true, position: 'bottom' } },
-            maintainAspectRatio: false
-          }
-        });
-      }
+      // We clear it here just in case, but actual rendering is now in loadStats to use tool breakdown
+      // Actually, if we don't clear it, the old logic might overwrite? 
+      // We are removing the logic, so it won't overwrite.
+      // But we should ensure the canvas exists.
+
 
       const statusCanvas = document.getElementById('chart-run-status');
       if (statusCanvas) {
@@ -8625,7 +8644,8 @@ $TOOL_DEFS = [
       const uid = document.getElementById('filter-user').value;
 
       // Update Database Stats (Cards) based on selected User
-      loadStats(uid);
+      // Update Database Stats (Cards) AND Tool Chart based on selected filters
+      loadStats(uid, st, tc);
 
       const filtered = RUNS.filter(r => {
         // Status filter
@@ -9068,9 +9088,9 @@ $TOOL_DEFS = [
     });
 
     /* Stats */
-    async function loadStats(userId = null) {
+    async function loadStats(userId = null, status = null, tool = null) {
       try {
-        const payload = userId ? { user_id: userId } : {};
+        const payload = { user_id: userId, status: status, tool: tool };
         const s = await api('stats', payload);
         document.getElementById('stat-total').textContent = s.total_runs;
         document.getElementById('stat-passed').textContent = s.passed;
@@ -9084,7 +9104,49 @@ $TOOL_DEFS = [
         const utilEl = document.getElementById('stat-utilized');
         if (utilEl) utilEl.textContent = s.utilized_tools;
 
-        } catch (e) {
+        // RENDER CLUSTERED BAR CHART (Tool vs Pass/Fail)
+        if (typeof Chart !== 'undefined' && s.tool_stats) {
+          const ctx = document.getElementById('chart-pass-fail');
+          if (ctx) {
+            const labels = s.tool_stats.map(t => t.tool_code); // Tool Codes on X-Axis
+            const passData = s.tool_stats.map(t => t.p);
+            const failData = s.tool_stats.map(t => t.f);
+
+            if (chartPassFail) chartPassFail.destroy();
+
+            chartPassFail = new Chart(ctx.getContext('2d'), {
+              type: 'bar',
+              data: {
+                labels: labels,
+                datasets: [
+                  {
+                    label: 'Passed',
+                    data: passData,
+                    backgroundColor: '#43A047'
+                  },
+                  {
+                    label: 'Failed',
+                    data: failData,
+                    backgroundColor: '#E53935'
+                  }
+                ]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                  x: { stacked: true },
+                  y: { stacked: true, beginAtZero: true }
+                },
+                plugins: {
+                  legend: { position: 'bottom' }
+                }
+              }
+            });
+          }
+        }
+
+      } catch (e) {
         console.error('Stats error:', e);
       }
     }
