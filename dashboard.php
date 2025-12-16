@@ -309,15 +309,24 @@ if (isset($_GET['api'])) {
           break;
         }
 
-        $stmt = $db->prepare("UPDATE qa_support_messages SET admin_reply=?, reply_at=NOW(), is_read=1 WHERE id=?");
-        $stmt->execute([$reply, $id]);
+        // Append reply with a separator
+        $separator = "\n\n--- Admin Reply ---\n";
+        $stmt = $db->prepare("UPDATE qa_support_messages SET admin_reply = CONCAT(IFNULL(admin_reply,''), ?, ?), reply_at=NOW(), is_read=1 WHERE id=?");
+        $stmt->execute([$separator, $reply, $id]);
         echo json_encode(['ok' => true]);
         break;
 
       case 'my-support-history':
         require_login();
         $uid = current_user()['id'];
-        $stmt = $db->prepare("SELECT * FROM qa_support_messages WHERE user_id=? ORDER BY created_at DESC");
+        // Join with qa_users to get the name, just like list-support
+        $stmt = $db->prepare("
+            SELECT m.*, u.name as user_name 
+            FROM qa_support_messages m 
+            LEFT JOIN qa_users u ON m.user_id = u.id 
+            WHERE m.user_id=? 
+            ORDER BY m.created_at DESC
+        ");
         $stmt->execute([$uid]);
         echo json_encode($stmt->fetchAll());
         break;
@@ -6198,6 +6207,42 @@ $TOOL_DEFS = [
   <title>QA Automation Dashboard</title>
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <style>
+    /* Support Layout Centering */
+    .support-layout {
+      display: flex;
+      height: 600px;
+      background: #fff;
+      border: 1px solid #dfe5eb;
+      border-radius: 10px;
+      overflow: hidden;
+      max-width: 1000px;
+      /* Match other sections */
+      margin: 0 auto;
+      /* Center it */
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+
+    .support-sidebar {
+      width: 300px;
+      background: #f8fafc;
+      border-right: 1px solid #dfe5eb;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .support-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background: #fff;
+    }
+
+    /* Pre-wrap for messages to support multi-line replies */
+    .msg-bubble {
+      white-space: pre-wrap;
+    }
+
     :root {
       --bg: #f4f7fa;
       --card: #fff;
@@ -6248,12 +6293,14 @@ $TOOL_DEFS = [
     /* SUPPORT SCREEN REDESIGN */
     .support-layout {
       display: flex;
-      height: calc(100vh - 140px); /* Adjust based on header/tabs */
+      height: calc(100vh - 140px);
+      /* Adjust based on header/tabs */
       background: #fff;
       border: 1px solid #ddd;
       border-radius: 8px;
       overflow: hidden;
     }
+
     .support-sidebar {
       width: 320px;
       background: #f8f9fa;
@@ -6261,6 +6308,7 @@ $TOOL_DEFS = [
       display: flex;
       flex-direction: column;
     }
+
     .support-main {
       flex: 1;
       display: flex;
@@ -6274,21 +6322,26 @@ $TOOL_DEFS = [
       padding: 16px;
       border-bottom: 1px solid #eee;
     }
+
     .user-profile-sm {
       display: flex;
       align-items: center;
       gap: 10px;
       margin-bottom: 12px;
     }
+
     .user-avatar-sm {
-      width: 32px; height: 32px;
+      width: 32px;
+      height: 32px;
       border-radius: 50%;
       background: #ccc;
       object-fit: cover;
     }
+
     .search-box {
       position: relative;
     }
+
     .search-box input {
       width: 100%;
       padding: 8px 12px 8px 32px;
@@ -6296,6 +6349,7 @@ $TOOL_DEFS = [
       border-radius: 6px;
       font-size: 13px;
     }
+
     .search-icon {
       position: absolute;
       left: 10px;
@@ -6303,12 +6357,14 @@ $TOOL_DEFS = [
       transform: translateY(-50%);
       color: #999;
     }
+
     .filter-tags {
       display: flex;
       gap: 8px;
       padding: 0 16px 16px;
       border-bottom: 1px solid #eee;
     }
+
     .filter-tag {
       font-size: 11px;
       padding: 4px 10px;
@@ -6318,6 +6374,7 @@ $TOOL_DEFS = [
       cursor: pointer;
       border: none;
     }
+
     .filter-tag.active {
       background: #e3f2fd;
       color: #1976d2;
@@ -6329,44 +6386,92 @@ $TOOL_DEFS = [
       overflow-y: auto;
       padding: 10px;
     }
+
     .ticket-card {
       background: #fff;
       border: 1px solid #eee;
-      border-left: 4px solid transparent; /* Status color */
+      border-left: 4px solid transparent;
+      /* Status color */
       border-radius: 6px;
       padding: 12px;
       margin-bottom: 10px;
       cursor: pointer;
       transition: box-shadow 0.2s;
     }
+
     .ticket-card:hover {
-      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     }
+
     .ticket-card.active {
       background: #f0f8ff;
       border-color: #bbdefb;
     }
-    .ticket-card.status-urgent { border-left-color: #ff5252; }
-    .ticket-card.status-medium { border-left-color: #ffca28; }
-    .ticket-card.status-low { border-left-color: #66bb6a; }
-    .ticket-card.status-high { border-left-color: #42a5f5; }
+
+    .ticket-card.status-urgent {
+      border-left-color: #ff5252;
+    }
+
+    .ticket-card.status-medium {
+      border-left-color: #ffca28;
+    }
+
+    .ticket-card.status-low {
+      border-left-color: #66bb6a;
+    }
+
+    .ticket-card.status-high {
+      border-left-color: #42a5f5;
+    }
 
     .t-header {
       display: flex;
       justify-content: space-between;
       margin-bottom: 4px;
     }
-    .t-title { font-weight: 600; font-size: 13px; color: #333; }
-    .t-badge { 
-      font-size: 10px; padding: 2px 6px; border-radius: 4px; 
-    }
-    .badge-urgent { background: #ffebee; color: #c62828; }
-    .badge-medium { background: #fff8e1; color: #f57f17; }
-    .badge-low { background: #e8f5e9; color: #2e7d32; }
-    .badge-high { background: #e3f2fd; color: #1565c0; } 
 
-    .t-meta { font-size: 11px; color: #777; margin-top: 4px; }
-    .t-user { display:block; margin-bottom: 2px;}
+    .t-title {
+      font-weight: 600;
+      font-size: 13px;
+      color: #333;
+    }
+
+    .t-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .badge-urgent {
+      background: #ffebee;
+      color: #c62828;
+    }
+
+    .badge-medium {
+      background: #fff8e1;
+      color: #f57f17;
+    }
+
+    .badge-low {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .badge-high {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+
+    .t-meta {
+      font-size: 11px;
+      color: #777;
+      margin-top: 4px;
+    }
+
+    .t-user {
+      display: block;
+      margin-bottom: 2px;
+    }
 
     /* Main Chat Area */
     .chat-header {
@@ -6377,8 +6482,17 @@ $TOOL_DEFS = [
       align-items: center;
       background: #fff;
     }
-    .chat-title h3 { margin: 0; font-size: 16px; }
-    .chat-title span { font-size: 12px; color: #777; margin-left: 8px; }
+
+    .chat-title h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .chat-title span {
+      font-size: 12px;
+      color: #777;
+      margin-left: 8px;
+    }
 
     .chat-messages {
       flex: 1;
@@ -6389,6 +6503,7 @@ $TOOL_DEFS = [
       flex-direction: column;
       gap: 16px;
     }
+
     .msg-bubble {
       max-width: 70%;
       padding: 12px 16px;
@@ -6397,18 +6512,21 @@ $TOOL_DEFS = [
       line-height: 1.5;
       position: relative;
     }
+
     .msg-user {
       align-self: flex-start;
       background: #fff;
       border: 1px solid #eee;
       border-top-left-radius: 0;
     }
+
     .msg-agent {
       align-self: flex-end;
       background: #2962ff;
       color: white;
       border-top-right-radius: 0;
     }
+
     .msg-meta {
       font-size: 10px;
       margin-top: 4px;
@@ -6421,11 +6539,13 @@ $TOOL_DEFS = [
       border-top: 1px solid #eee;
       background: #fff;
     }
+
     .chat-actions {
       display: flex;
       gap: 8px;
       margin-bottom: 8px;
     }
+
     .action-chip {
       font-size: 11px;
       padding: 4px 10px;
@@ -6434,12 +6554,16 @@ $TOOL_DEFS = [
       cursor: pointer;
       border: 1px solid #eee;
     }
-    .action-chip:hover { background: #eee; }
+
+    .action-chip:hover {
+      background: #eee;
+    }
 
     .input-row {
       display: flex;
       gap: 10px;
     }
+
     .input-row textarea {
       flex: 1;
       border: 1px solid #ddd;
@@ -6449,15 +6573,18 @@ $TOOL_DEFS = [
       resize: none;
       height: 60px;
     }
+
     .send-btn {
-      width: 40px; height: 40px;
+      width: 40px;
+      height: 40px;
       background: #2962ff;
       color: white;
       border: none;
       border-radius: 6px;
       cursor: pointer;
       display: flex;
-      align-items: center; justify-content: center;
+      align-items: center;
+      justify-content: center;
     }
 
     /* Switch View Fab */
@@ -6471,7 +6598,7 @@ $TOOL_DEFS = [
       border-radius: 20px;
       font-size: 12px;
       cursor: pointer;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
       z-index: 100;
     }
 
@@ -7458,9 +7585,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                    </option>
+                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                  </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -7609,85 +7736,87 @@ $TOOL_DEFS = [
         <!-- Header / Profile -->
         <div class="sidebar-header">
           <div class="user-profile-sm">
-            <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($currentUser['name']); ?>&background=random" class="user-avatar-sm" id="supp-my-avatar">
+            <img src="https://ui-avatars.com/api/?name=<?php echo urlencode($currentUser['name']); ?>&background=random"
+              class="user-avatar-sm" id="supp-my-avatar">
             <div>
               <div style="font-weight:600; font-size:13px;"><?php echo htmlspecialchars($currentUser['name']); ?></div>
               <div style="font-size:11px; color:#777;" id="supp-role-label">Support Interface</div>
             </div>
           </div>
           <div class="search-box">
-             <span class="search-icon">&#128269;</span>
-             <input type="text" placeholder="Search tickets..." id="supp-search">
+            <span class="search-icon">&#128269;</span>
+            <input type="text" placeholder="Search tickets..." id="supp-search">
           </div>
         </div>
 
         <!-- Filters (Admin Only usually, but showing for design) -->
         <div class="filter-tags" id="supp-filters">
-           <button class="filter-tag active" onclick="filterSupport('all', this)">All</button>
-           <button class="filter-tag" onclick="filterSupport('open', this)">Open</button>
-           <button class="filter-tag" onclick="filterSupport('pending', this)">Pending</button>
+          <button class="filter-tag active" onclick="filterSupport('all', this)">All</button>
+          <button class="filter-tag" onclick="filterSupport('open', this)">Open</button>
+          <button class="filter-tag" onclick="filterSupport('pending', this)">Pending</button>
         </div>
-        
+
         <!-- Ticket List -->
         <div class="ticket-list" id="supp-ticket-list">
-           <!-- Loaded via JS -->
-           <div style="text-align:center; padding:20px; color:#999;">Loading...</div>
+          <!-- Loaded via JS -->
+          <div style="text-align:center; padding:20px; color:#999;">Loading...</div>
         </div>
-        
+
         <!-- User View: New Ticket Button -->
         <div style="padding:10px; border-top:1px solid #eee; display:none;" id="supp-user-actions">
-           <button class="btn-primary" style="width:100%;" onclick="openNewTicketModal()">+ New Support Ticket</button>
+          <button class="btn-primary" style="width:100%;" onclick="openNewTicketModal()">+ New Support Ticket</button>
         </div>
       </div>
 
       <!-- Main Chat Area -->
       <div class="support-main">
         <div id="supp-chat-view" style="display:flex; flex-direction:column; height:100%;">
-            <div class="chat-header">
-              <div class="chat-title">
-                <h3 id="chat-ticket-subject">Select a ticket</h3>
-                <span id="chat-ticket-id"></span>
-                <span class="t-badge badge-high" id="chat-ticket-status"></span>
-              </div>
-              <div style="display:flex; gap:10px;">
-                  <!-- Admin Actions -->
-                  <button class="btn-small btn-ghost" onclick="escalateTicket()">Escalate</button>
-                  <button class="btn-small btn-ghost" onclick="closeTicket()">Close Ticket</button>
-              </div>
+          <div class="chat-header">
+            <div class="chat-title">
+              <h3 id="chat-ticket-subject">Select a ticket</h3>
+              <span id="chat-ticket-id"></span>
+              <span class="t-badge badge-high" id="chat-ticket-status"></span>
             </div>
+            <div style="display:flex; gap:10px;">
+              <!-- Admin Actions -->
+              <button class="btn-small btn-ghost" onclick="escalateTicket()">Escalate</button>
+              <button class="btn-small btn-ghost" onclick="closeTicket()">Close Ticket</button>
+            </div>
+          </div>
 
-            <div class="chat-messages" id="chat-messages-area">
-               <div style="text-align:center; margin-top:40px; color:#ccc;">
-                  Select a ticket from the sidebar to view details.
-               </div>
+          <div class="chat-messages" id="chat-messages-area">
+            <div style="text-align:center; margin-top:40px; color:#ccc;">
+              Select a ticket from the sidebar to view details.
             </div>
+          </div>
 
-            <div class="chat-input-area">
-              <div class="chat-actions">
-                 <div class="action-chip" onclick="insertQuickReply('Hello! How can I help you today?')">Quick Reply</div>
-                 <div class="action-chip" onclick="insertQuickReply('I am checking your account status...')">Check Status</div>
-              </div>
-              <div class="input-row">
-                 <textarea id="chat-reply-input" placeholder="Type your response..."></textarea>
-                 <button class="send-btn" onclick="sendChatMessage()">&#10148;</button>
+          <div class="chat-input-area">
+            <div class="chat-actions">
+              <div class="action-chip" onclick="insertQuickReply('Hello! How can I help you today?')">Quick Reply</div>
+              <div class="action-chip" onclick="insertQuickReply('I am checking your account status...')">Check Status
               </div>
             </div>
+            <div class="input-row">
+              <textarea id="chat-reply-input" placeholder="Type your response..."></textarea>
+              <button class="send-btn" onclick="sendChatMessage()">&#10148;</button>
+            </div>
+          </div>
         </div>
-        
-        <!-- Floating Switcher -->
-        <div class="view-switch" onclick="toggleSupportRole()">
-           Switch to <span id="switch-label">User View</span>
-        </div>
+
+        <!-- Floating Switcher Removed -->
       </div>
     </div>
   </section>
 
   <!-- Report Modal (Iframe) -->
   <div id="modal-report" class="modal-overlay">
-    <div class="modal-content" style="width:95%; max-width:1200px; height:90vh; padding:0; display:flex; flex-direction:column; background:#fff;">
-      <div style="padding:10px 15px; background:#f4f7fa; border-bottom:1px solid #ddd; display:flex; justify-content:space-between; align-items:center;">
-          <h2 style="margin:0; font-size:18px; color:#333;">Detailed Report</h2>
-          <button onclick="closeReportModal()" style="background:transparent; border:none; font-size:24px; color:#555; cursor:pointer;">&times;</button>
+    <div class="modal-content"
+      style="width:95%; max-width:1200px; height:90vh; padding:0; display:flex; flex-direction:column; background:#fff;">
+      <div
+        style="padding:10px 15px; background:#f4f7fa; border-bottom:1px solid #ddd; display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="margin:0; font-size:18px; color:#333;">Detailed Report</h2>
+        <button onclick="closeReportModal()"
+          style="background:transparent; border:none; font-size:24px; color:#555; cursor:pointer;">&times;</button>
       </div>
       <iframe id="report-iframe" src="about:blank" style="flex:1; border:none; width:100%; height:100%;"></iframe>
     </div>
@@ -8896,7 +9025,7 @@ $TOOL_DEFS = [
     enforceRoleUI();
 
     /* Support Logic (Redesign) */
-    
+
     // MOCK STATE
     let SUPP_ROLE = 'admin'; // 'admin' or 'user'
     let ACTIVE_TICKET = null;
@@ -8904,112 +9033,112 @@ $TOOL_DEFS = [
 
     // Init
     document.addEventListener('DOMContentLoaded', () => {
-       // Check if we came from a redirect or saved state
-       if(localStorage.getItem('qa_supp_role')) {
-          SUPP_ROLE = localStorage.getItem('qa_supp_role');
-       }
-       updateSupportUI();
+      // Check if we came from a redirect or saved state
+      if (localStorage.getItem('qa_supp_role')) {
+        SUPP_ROLE = localStorage.getItem('qa_supp_role');
+      }
+      updateSupportUI();
     });
 
     function toggleSupportRole() {
-        SUPP_ROLE = (SUPP_ROLE === 'admin') ? 'user' : 'admin';
-        localStorage.setItem('qa_supp_role', SUPP_ROLE);
-        
-        // Mock UI update for user
-        const label = document.getElementById('supp-role-label');
-        if(label) label.textContent = (SUPP_ROLE === 'admin') ? 'Support Agent (Admin)' : 'Customer (User)';
-        
-        const avatar = document.getElementById('supp-my-avatar');
-        if(avatar) {
-             // quick visual chang
-             avatar.style.border = (SUPP_ROLE === 'admin') ? '2px solid #2962ff' : '2px solid #4caf50';
-        }
+      SUPP_ROLE = (SUPP_ROLE === 'admin') ? 'user' : 'admin';
+      localStorage.setItem('qa_supp_role', SUPP_ROLE);
 
-        updateSupportUI();
-        loadSupportData(); // Reload list
+      // Mock UI update for user
+      const label = document.getElementById('supp-role-label');
+      if (label) label.textContent = (SUPP_ROLE === 'admin') ? 'Support Agent (Admin)' : 'Customer (User)';
+
+      const avatar = document.getElementById('supp-my-avatar');
+      if (avatar) {
+        // quick visual chang
+        avatar.style.border = (SUPP_ROLE === 'admin') ? '2px solid #2962ff' : '2px solid #4caf50';
+      }
+
+      updateSupportUI();
+      loadSupportData(); // Reload list
     }
 
     function updateSupportUI() {
-        const switchLabel = document.getElementById('switch-label');
-        if(switchLabel) switchLabel.textContent = (SUPP_ROLE === 'admin') ? 'User View' : 'Admin View';
-        
-        const userActions = document.getElementById('supp-user-actions');
-        if(userActions) userActions.style.display = (SUPP_ROLE === 'user') ? 'block' : 'none';
-        
-        const filters = document.getElementById('supp-filters');
-        if(filters) filters.style.display = (SUPP_ROLE === 'admin') ? 'flex' : 'none';
+      const switchLabel = document.getElementById('switch-label');
+      if (switchLabel) switchLabel.textContent = (SUPP_ROLE === 'admin') ? 'User View' : 'Admin View';
+
+      const userActions = document.getElementById('supp-user-actions');
+      if (userActions) userActions.style.display = (SUPP_ROLE === 'user') ? 'block' : 'none';
+
+      const filters = document.getElementById('supp-filters');
+      if (filters) filters.style.display = (SUPP_ROLE === 'admin') ? 'flex' : 'none';
     }
 
     // Load Tickets (Unified function for both roles for now, filtering handled by API/Mock)
     async function loadSupportData() {
-        const listDiv = document.getElementById('supp-ticket-list');
-        if (!listDiv) return;
-        listDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">Loading...</div>';
+      const listDiv = document.getElementById('supp-ticket-list');
+      if (!listDiv) return;
+      listDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">Loading...</div>';
 
-        // In a real app, 'admin' calls list-support, 'user' calls my-support-history
-        // Here we will fetch and manually enhance with mock data for the design
-        let rawData = [];
-        try {
-            if(SUPP_ROLE === 'admin') {
-                rawData = await api('list-support');
-            } else {
-                rawData = await api('my-support-history');
-            }
-        } catch(e) {
-            console.error(e);
-            listDiv.innerHTML = '<div style="text-align:center; color:red;">Error loading tickets</div>';
-            return;
+      // In a real app, 'admin' calls list-support, 'user' calls my-support-history
+      // Here we will fetch and manually enhance with mock data for the design
+      let rawData = [];
+      try {
+        if (SUPP_ROLE === 'admin') {
+          rawData = await api('list-support');
+        } else {
+          rawData = await api('my-support-history');
         }
+      } catch (e) {
+        console.error(e);
+        listDiv.innerHTML = '<div style="text-align:center; color:red;">Error loading tickets</div>';
+        return;
+      }
 
-        if (rawData.length === 0) {
-            listDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">No tickets found.</div>';
-            TICKETS_CACHE = [];
-            return;
+      if (rawData.length === 0) {
+        listDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">No tickets found.</div>';
+        TICKETS_CACHE = [];
+        return;
+      }
+
+      // ENHANCE DATA (Mocking missing fields for design)
+      TICKETS_CACHE = rawData.map(t => {
+        // Mock status/priority if not present
+        if (!t.status) {
+          // Infer from reply
+          if (t.admin_reply) t.status = 'closed';
+          else t.status = 'open';
         }
+        // Random mock for priority visual
+        if (!t.priority) {
+          const priorities = ['high', 'medium', 'low', 'urgent'];
+          t.priority = priorities[t.id % 4];
+        }
+        return t;
+      });
 
-        // ENHANCE DATA (Mocking missing fields for design)
-        TICKETS_CACHE = rawData.map(t => {
-            // Mock status/priority if not present
-            if(!t.status) {
-                // Infer from reply
-                if(t.admin_reply) t.status = 'closed'; 
-                else t.status = 'open';
-            }
-            // Random mock for priority visual
-            if(!t.priority) {
-                 const priorities = ['high', 'medium', 'low', 'urgent'];
-                 t.priority = priorities[t.id % 4]; 
-            }
-            return t;
-        });
-
-        renderTicketList(TICKETS_CACHE);
+      renderTicketList(TICKETS_CACHE);
     }
-    
+
     // Alias for existing calls
     window.loadSupport = loadSupportData;
     window.loadMySupport = loadSupportData;
 
     function renderTicketList(tickets) {
-        const listDiv = document.getElementById('supp-ticket-list');
-        listDiv.innerHTML = '';
-        
-        tickets.forEach(t => {
-            const card = document.createElement('div');
-            card.className = `ticket-card status-${t.priority || 'low'}`;
-            card.onclick = () => selectTicket(t.id);
-            if(ACTIVE_TICKET && ACTIVE_TICKET.id == t.id) card.classList.add('active');
+      const listDiv = document.getElementById('supp-ticket-list');
+      listDiv.innerHTML = '';
 
-            // Format Date
-            const dateStr = t.created_at || 'Just now';
-            
-            // Status Badge logic
-            let badgeClass = 'badge-low';
-            if(t.priority === 'urgent') badgeClass = 'badge-urgent';
-            if(t.priority === 'high') badgeClass = 'badge-high';
-            if(t.priority === 'medium') badgeClass = 'badge-medium';
-            
-            card.innerHTML = `
+      tickets.forEach(t => {
+        const card = document.createElement('div');
+        card.className = `ticket-card status-${t.priority || 'low'}`;
+        card.onclick = () => selectTicket(t.id);
+        if (ACTIVE_TICKET && ACTIVE_TICKET.id == t.id) card.classList.add('active');
+
+        // Format Date
+        const dateStr = t.created_at || 'Just now';
+
+        // Status Badge logic
+        let badgeClass = 'badge-low';
+        if (t.priority === 'urgent') badgeClass = 'badge-urgent';
+        if (t.priority === 'high') badgeClass = 'badge-high';
+        if (t.priority === 'medium') badgeClass = 'badge-medium';
+
+        card.innerHTML = `
                <div class="t-header">
                   <span class="t-title">Ticket #${t.id}</span>
                   <span class="t-badge ${badgeClass}">${t.priority || 'Normal'}</span>
@@ -9017,127 +9146,127 @@ $TOOL_DEFS = [
                <div class="t-user" style="font-size:12px; font-weight:600;">${t.subject}</div>
                <div class="t-meta">${t.user_name || 'User'} &bull; ${dateStr}</div>
             `;
-            listDiv.appendChild(card);
-        });
+        listDiv.appendChild(card);
+      });
     }
 
     function selectTicket(id) {
-        const t = TICKETS_CACHE.find(x => x.id == id);
-        if(!t) return;
-        ACTIVE_TICKET = t;
-        
-        // Update Sidebar Active State
-        document.querySelectorAll('.ticket-card').forEach(c => c.classList.remove('active'));
-        // Re-render list to show active state properly (or just toggle class if cached dom elements)
-        renderTicketList(TICKETS_CACHE); 
+      const t = TICKETS_CACHE.find(x => x.id == id);
+      if (!t) return;
+      ACTIVE_TICKET = t;
 
-        // Update Chat Header
-        document.getElementById('chat-ticket-subject').innerText = t.subject;
-        document.getElementById('chat-ticket-id').innerText = `Ticket #${t.id} • ${t.user_name || 'User'}`;
-        const statusBadge = document.getElementById('chat-ticket-status');
-        statusBadge.className = `t-badge badge-${t.priority || 'low'}`;
-        statusBadge.innerText = (t.priority || 'Normal').toUpperCase();
+      // Update Sidebar Active State
+      document.querySelectorAll('.ticket-card').forEach(c => c.classList.remove('active'));
+      // Re-render list to show active state properly (or just toggle class if cached dom elements)
+      renderTicketList(TICKETS_CACHE);
 
-        // Render Messages
-        const chatArea = document.getElementById('chat-messages-area');
-        chatArea.innerHTML = '';
+      // Update Chat Header
+      document.getElementById('chat-ticket-subject').innerText = t.subject;
+      document.getElementById('chat-ticket-id').innerText = `Ticket #${t.id} • ${t.user_name || 'User'}`;
+      const statusBadge = document.getElementById('chat-ticket-status');
+      statusBadge.className = `t-badge badge-${t.priority || 'low'}`;
+      statusBadge.innerText = (t.priority || 'Normal').toUpperCase();
 
-        // 1. User Message
-        const userMsg = document.createElement('div');
-        userMsg.className = 'msg-bubble msg-user';
-        userMsg.innerHTML = `
+      // Render Messages
+      const chatArea = document.getElementById('chat-messages-area');
+      chatArea.innerHTML = '';
+
+      // 1. User Message
+      const userMsg = document.createElement('div');
+      userMsg.className = 'msg-bubble msg-user';
+      userMsg.innerHTML = `
             ${t.message}
             <span class="msg-meta">${t.created_at}</span>
         `;
-        chatArea.appendChild(userMsg);
+      chatArea.appendChild(userMsg);
 
-        // 2. Admin Reply (if exists)
-        if(t.admin_reply) {
-            const adminMsg = document.createElement('div');
-            adminMsg.className = 'msg-bubble msg-agent';
-            adminMsg.innerHTML = `
+      // 2. Admin Reply (if exists)
+      if (t.admin_reply) {
+        const adminMsg = document.createElement('div');
+        adminMsg.className = 'msg-bubble msg-agent';
+        adminMsg.innerHTML = `
                 ${t.admin_reply}
                 <span class="msg-meta">${t.reply_at || 'Recently'}</span>
             `;
-            chatArea.appendChild(adminMsg);
-        }
+        chatArea.appendChild(adminMsg);
+      }
     }
 
     async function sendChatMessage() {
-       if(!ACTIVE_TICKET) return alert('Select a ticket first');
-       const input = document.getElementById('chat-reply-input');
-       const text = input.value.trim();
-       if(!text) return;
+      if (!ACTIVE_TICKET) return alert('Select a ticket first');
+      const input = document.getElementById('chat-reply-input');
+      const text = input.value.trim();
+      if (!text) return;
 
-       // Decide API based on Role
-       // Admin -> reply-support
-       // User -> in this simple system, maybe create a new ticket or we assume thread support?
-       // Current backend `reply-support` is only for admin to reply to a specific user ticket.
-       // Users cannot "reply" to a ticket in this simple DB schema (it's 1 q, 1 a).
-       
-       if(SUPP_ROLE === 'admin') {
-           const res = await api('reply-support', { id: ACTIVE_TICKET.id, reply: text });
-           if(res.ok) {
-               // Optimistic UI updates
-               const chatArea = document.getElementById('chat-messages-area');
-               const msg = document.createElement('div');
-               msg.className = 'msg-bubble msg-agent';
-               msg.innerHTML = `${text}<span class="msg-meta">Just now</span>`;
-               chatArea.appendChild(msg);
-               input.value = '';
-           } else {
-               alert('Error sending reply');
-           }
-       } else {
-           alert('Multi-message threads are not yet supported in backend. Please open a new ticket.');
-       }
+      // Decide API based on Role
+      // Admin -> reply-support
+      // User -> in this simple system, maybe create a new ticket or we assume thread support?
+      // Current backend `reply-support` is only for admin to reply to a specific user ticket.
+      // Users cannot "reply" to a ticket in this simple DB schema (it's 1 q, 1 a).
+
+      if (SUPP_ROLE === 'admin') {
+        const res = await api('reply-support', { id: ACTIVE_TICKET.id, reply: text });
+        if (res.ok) {
+          // Optimistic UI updates
+          const chatArea = document.getElementById('chat-messages-area');
+          const msg = document.createElement('div');
+          msg.className = 'msg-bubble msg-agent';
+          msg.innerHTML = `${text}<span class="msg-meta">Just now</span>`;
+          chatArea.appendChild(msg);
+          input.value = '';
+        } else {
+          alert('Error sending reply');
+        }
+      } else {
+        alert('Multi-message threads are not yet supported in backend. Please open a new ticket.');
+      }
     }
-    
+
     function insertQuickReply(text) {
-        const input = document.getElementById('chat-reply-input');
-        input.value = text;
-        input.focus();
+      const input = document.getElementById('chat-reply-input');
+      input.value = text;
+      input.focus();
     }
-    
+
     function openNewTicketModal() {
-        // Simple prompt for now or show the old form in a modal
-        const subject = prompt("Ticket Subject:");
-        if(!subject) return;
-        const message = prompt("Message Details:");
-        if(!message) return;
-        
-        api('save-support', { subject, message }).then(res => {
-            if(res.ok) {
-                alert('Ticket created');
-                loadSupportData();
-            } else {
-                alert('Error creating ticket');
-            }
-        });
+      // Simple prompt for now or show the old form in a modal
+      const subject = prompt("Ticket Subject:");
+      if (!subject) return;
+      const message = prompt("Message Details:");
+      if (!message) return;
+
+      api('save-support', { subject, message }).then(res => {
+        if (res.ok) {
+          alert('Ticket created');
+          loadSupportData();
+        } else {
+          alert('Error creating ticket');
+        }
+      });
     }
 
     function filterSupport(type, btn) {
-        document.querySelectorAll('.filter-tag').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        // Implement client-side filter
-        if(type === 'all') renderTicketList(TICKETS_CACHE);
-        if(type === 'open') renderTicketList(TICKETS_CACHE.filter(t => !t.admin_reply));
-        if(type === 'pending') renderTicketList(TICKETS_CACHE.filter(t => !t.admin_reply)); // same as open for now
+      document.querySelectorAll('.filter-tag').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Implement client-side filter
+      if (type === 'all') renderTicketList(TICKETS_CACHE);
+      if (type === 'open') renderTicketList(TICKETS_CACHE.filter(t => !t.admin_reply));
+      if (type === 'pending') renderTicketList(TICKETS_CACHE.filter(t => !t.admin_reply)); // same as open for now
     }
-    
+
     function escalateTicket() {
-        alert('Escalated to Tier 2 (Mock)');
-        if(ACTIVE_TICKET) {
-            ACTIVE_TICKET.priority = 'urgent';
-            renderTicketList(TICKETS_CACHE);
-            selectTicket(ACTIVE_TICKET.id);
-        }
+      alert('Escalated to Tier 2 (Mock)');
+      if (ACTIVE_TICKET) {
+        ACTIVE_TICKET.priority = 'urgent';
+        renderTicketList(TICKETS_CACHE);
+        selectTicket(ACTIVE_TICKET.id);
+      }
     }
-    
+
     function closeTicket() {
-        if(!confirm('Close this ticket?')) return;
-        // Mock close
-        alert('Ticket closed');
+      if (!confirm('Close this ticket?')) return;
+      // Mock close
+      alert('Ticket closed');
     }
     /* Profile Logic */
     const profileModal = document.getElementById('profile-modal');
@@ -9234,13 +9363,13 @@ $TOOL_DEFS = [
       if (iframe) iframe.src = 'about:blank';
     }
 
-    window.triggerOpenIssuesReport = function() {
-       const userFilter = document.getElementById('filter-user');
-       let url = 'qa_run_report.php?status=failed';
-       if (userFilter && userFilter.value) {
-           url += '&user_id=' + encodeURIComponent(userFilter.value);
-       }
-       openReportModal(url);
+    window.triggerOpenIssuesReport = function () {
+      const userFilter = document.getElementById('filter-user');
+      let url = 'qa_run_report.php?status=failed';
+      if (userFilter && userFilter.value) {
+        url += '&user_id=' + encodeURIComponent(userFilter.value);
+      }
+      openReportModal(url);
     };
 
     /* Initial */
