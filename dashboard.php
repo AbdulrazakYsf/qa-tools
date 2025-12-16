@@ -8134,7 +8134,7 @@ $TOOL_DEFS = [
 
       const trendCanvas = document.getElementById('chart-pass-trend');
       if (trendCanvas) {
-        const sorted = RUNS.slice().sort((a, b) => {
+        const sorted = listToUse.slice().sort((a, b) => {
           const da = (a.run_date || '').toString();
           const db = (b.run_date || '').toString();
           return da.localeCompare(db);
