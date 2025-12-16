@@ -572,6 +572,46 @@ if (isset($_GET['api'])) {
         $bQuery->execute($params);
         $toolStats = $bQuery->fetchAll(PDO::FETCH_ASSOC);
 
+        // 4. STATS EXPANSION: Total Configs & Tickets
+        // Configs: Count all enabled (or just all?) - let's count all.
+        // If user is admin/viewer, show all. If tester, maybe show only theirs? 
+        // For simplicity and "Total", we show valid configs in system or accessible ones.
+        // Let's stick to "All Configs" for now as it's a dashboard stat.
+        $sqlCfg = "SELECT COUNT(*) as c FROM qa_tool_configs";
+        // If we want to filter by user: 
+        // if ($targetUid) { $sqlCfg .= " WHERE user_id = ?"; ... }
+        // The user request was just "Total Configurations", implying system-wide.
+        // But to be consistent with other stats, maybe we should respect the user context if possible?
+        // Existing stats (runs) are filtered by user.
+        // Let's do System Total for Configs as they are often shared.
+        $stmtCfg = $db->query($sqlCfg);
+        $totalConfigs = $stmtCfg->fetch()['c'];
+
+        // Tickets:
+        // Admin sees all. User sees theirs.
+        $sqlTix = "SELECT COUNT(*) as c FROM qa_support_messages";
+        $pTix = [];
+        // user['role'] is checkable via $user session or helper
+        // But here we are in API. We have $targetUid if it was set for filtering runs.
+        // However, standard stats logic:
+        // If Admin: Show Total Tickets in system.
+        // If Tester: Show Total My Tickets.
+        // We can reuse the $targetUid logic if it aligns, OR check the session user role.
+        // best is to check session role.
+        $currentUserRole = $currentUser['role'] ?? 'viewer';
+        if ($currentUserRole !== 'admin') {
+          $sqlTix .= " WHERE user_id = ?";
+          $pTix[] = $user['id']; // $user is populated from required_login/current_user at top of endpoint?
+          // specific 'stats' endpoint doesn't call current_user() explicitly at top but 'list-runs' does.
+          // We need to ensure we have the user.
+          // Looking at code: $user = current_user(); is called in 'stats' block?
+          // Let's check lines 480-500.
+          // It calls: $user = current_user(); 
+        }
+        $qTix = $db->prepare($sqlTix);
+        $qTix->execute($pTix);
+        $totalTickets = $qTix->fetch()['c'];
+
         echo json_encode([
           'total_runs' => $total,
           'passed' => $passed,
@@ -579,7 +619,9 @@ if (isset($_GET['api'])) {
           'open_issues' => $open,
           'pass_rate' => $passRate,
           'utilized_tools' => $utilized,
-          'tool_stats' => $toolStats
+          'tool_stats' => $toolStats,
+          'total_configs' => $totalConfigs,
+          'total_tickets' => $totalTickets
         ]);
         break;
 
@@ -7585,6 +7627,18 @@ $TOOL_DEFS = [
           <div class="stat-value" id="stat-utilized">0</div>
           <div class="stat-meta">Distinct tools ever run</div>
         </div>
+        <!-- Total Configs -->
+        <div class="stat-card" style="border-top: 4px solid #7cb342;">
+          <h3>Total Configs</h3>
+          <div class="stat-value" id="stat-configs">0</div>
+          <div class="stat-meta">Available tool configurations</div>
+        </div>
+        <!-- Support Tickets -->
+        <div class="stat-card" style="border-top: 4px solid #d81b60;">
+          <h3>Support Tickets</h3>
+          <div class="stat-value" id="stat-tickets">0</div>
+          <div class="stat-meta">Total tickets in system</div>
+        </div>
       </div>
 
       <div class="dashboard-grid">
@@ -9103,6 +9157,12 @@ $TOOL_DEFS = [
 
         const utilEl = document.getElementById('stat-utilized');
         if (utilEl) utilEl.textContent = s.utilized_tools;
+
+        const cfgEl = document.getElementById('stat-configs');
+        if (cfgEl) cfgEl.textContent = s.total_configs;
+
+        const tixEl = document.getElementById('stat-tickets');
+        if (tixEl) tixEl.textContent = s.total_tickets;
 
         // RENDER CLUSTERED BAR CHART (Tool vs Pass/Fail)
         if (typeof Chart !== 'undefined' && s.tool_stats) {
