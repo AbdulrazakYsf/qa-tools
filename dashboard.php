@@ -301,18 +301,36 @@ if (isset($_GET['api'])) {
         break;
 
       case 'reply-support':
-        require_role(['admin']);
+        require_role(['admin', 'tester']); // Allow users to reply too
+        $current = current_user();
         $id = $input['id'] ?? null;
         $reply = $input['reply'] ?? '';
+
         if (!$id || !$reply) {
           echo json_encode(['error' => 'Missing ID or Reply']);
           break;
         }
 
-        // Append reply with a separator
-        $separator = "\n\n--- Admin Reply ---\n";
-        $stmt = $db->prepare("UPDATE qa_support_messages SET admin_reply = CONCAT(IFNULL(admin_reply,''), ?, ?), reply_at=NOW(), is_read=1 WHERE id=?");
-        $stmt->execute([$separator, $reply, $id]);
+        // Check ownership if tester
+        if ($current['role'] !== 'admin') {
+          $chk = $db->prepare("SELECT user_id FROM qa_support_messages WHERE id=?");
+          $chk->execute([$id]);
+          $row = $chk->fetch();
+          if (!$row || $row['user_id'] != $current['id']) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Access Denied']);
+            break;
+          }
+        }
+
+        $senderName = ($current['role'] === 'admin') ? 'Admin' : 'User';
+        $separator = "\n\n--- $senderName Reply ---\n";
+
+        // If admin replies, is_read=1 (User sees it as new). If user replies, is_read=0 (Admin sees it as new).
+        $isReadVal = ($current['role'] === 'admin') ? 1 : 0;
+
+        $stmt = $db->prepare("UPDATE qa_support_messages SET admin_reply = CONCAT(IFNULL(admin_reply,''), ?, ?), reply_at=NOW(), is_read=? WHERE id=?");
+        $stmt->execute([$separator, $reply, $isReadVal, $id]);
         echo json_encode(['ok' => true]);
         break;
 
@@ -7563,7 +7581,7 @@ $TOOL_DEFS = [
           updateBulkAction();
         } catch (e) {
           alert('Error deleting runs: ' + e.message);
-        }
+    }
       }
     </script>
 
@@ -9026,47 +9044,35 @@ $TOOL_DEFS = [
 
     /* Support Logic (Redesign) */
 
-    // MOCK STATE
-    let SUPP_ROLE = 'admin'; // 'admin' or 'user'
+    // MOCK STATE REMOVED - Using Real Role
+    let SUPP_ROLE = (typeof CURRENT_USER_ROLE !== 'undefined') ? CURRENT_USER_ROLE : 'viewer';
+    // Map tester->user for internal logic consistency if needed, but 'tester' is fine.
+    if(SUPP_ROLE === 'tester') SUPP_ROLE = 'user';
+
     let ACTIVE_TICKET = null;
     let TICKETS_CACHE = [];
 
     // Init
     document.addEventListener('DOMContentLoaded', () => {
-      // Check if we came from a redirect or saved state
-      if (localStorage.getItem('qa_supp_role')) {
-        SUPP_ROLE = localStorage.getItem('qa_supp_role');
-      }
-      updateSupportUI();
+       updateSupportUI();
+       // Auto load if support tab is active (or just load it anyway)
+       loadSupportData();
     });
 
-    function toggleSupportRole() {
-      SUPP_ROLE = (SUPP_ROLE === 'admin') ? 'user' : 'admin';
-      localStorage.setItem('qa_supp_role', SUPP_ROLE);
-
-      // Mock UI update for user
-      const label = document.getElementById('supp-role-label');
-      if (label) label.textContent = (SUPP_ROLE === 'admin') ? 'Support Agent (Admin)' : 'Customer (User)';
-
-      const avatar = document.getElementById('supp-my-avatar');
-      if (avatar) {
-        // quick visual chang
-        avatar.style.border = (SUPP_ROLE === 'admin') ? '2px solid #2962ff' : '2px solid #4caf50';
-      }
-
-      updateSupportUI();
-      loadSupportData(); // Reload list
-    }
+    /* Toggle Removed */
 
     function updateSupportUI() {
-      const switchLabel = document.getElementById('switch-label');
-      if (switchLabel) switchLabel.textContent = (SUPP_ROLE === 'admin') ? 'User View' : 'Admin View';
+      // Label
+      const label = document.getElementById('supp-role-label');
+      if(label) label.textContent = (SUPP_ROLE === 'admin') ? 'Support Agent (Admin)' : 'Support Interface';
 
-      const userActions = document.getElementById('supp-user-actions');
-      if (userActions) userActions.style.display = (SUPP_ROLE === 'user') ? 'block' : 'none';
-
+      // Filters - Admin only
       const filters = document.getElementById('supp-filters');
-      if (filters) filters.style.display = (SUPP_ROLE === 'admin') ? 'flex' : 'none';
+      if(filters) filters.style.display = (SUPP_ROLE === 'admin') ? 'flex' : 'none';
+      
+      // New Ticket Button - User only
+      const userActions = document.getElementById('supp-user-actions');
+      if(userActions) userActions.style.display = (SUPP_ROLE === 'admin') ? 'none' : 'block';
     }
 
     // Load Tickets (Unified function for both roles for now, filtering handled by API/Mock)
@@ -9198,28 +9204,33 @@ $TOOL_DEFS = [
       const text = input.value.trim();
       if (!text) return;
 
-      // Decide API based on Role
       // Admin -> reply-support
       // User -> in this simple system, maybe create a new ticket or we assume thread support?
       // Current backend `reply-support` is only for admin to reply to a specific user ticket.
       // Users cannot "reply" to a ticket in this simple DB schema (it's 1 q, 1 a).
 
-      if (SUPP_ROLE === 'admin') {
-        const res = await api('reply-support', { id: ACTIVE_TICKET.id, reply: text });
-        if (res.ok) {
-          // Optimistic UI updates
-          const chatArea = document.getElementById('chat-messages-area');
-          const msg = document.createElement('div');
-          msg.className = 'msg-bubble msg-agent';
-          msg.innerHTML = `${text}<span class="msg-meta">Just now</span>`;
-          chatArea.appendChild(msg);
-          input.value = '';
-        } else {
-          alert('Error sending reply');
-        }
-      } else {
-        alert('Multi-message threads are not yet supported in backend. Please open a new ticket.');
-      }
+       // Unified reply logic
+       const res = await api('reply-support', { id: ACTIVE_TICKET.id, reply: text });
+       if(res.ok) {
+           // Optimistic UI updates
+           const chatArea = document.getElementById('chat-messages-area');
+           const msg = document.createElement('div');
+           msg.className = 'msg-bubble msg-agent'; // Agent style for self (or user style, doesn't matter much for self-view)
+           // If user, maybe style differently? But maintaining one style for "Me" is fine.
+           
+           // Divider visual (mock)
+           const roleName = (SUPP_ROLE==='admin') ? 'Admin' : 'User';
+           const fullText = `\n\n--- ${roleName} Reply ---\n${text}`;
+           
+           msg.innerHTML = `${fullText}<span class="msg-meta">Just now</span>`;
+           chatArea.appendChild(msg);
+           input.value = '';
+           
+           // Reload to get server timestamp/format eventually
+           // loadSupportData(); 
+       } else {
+           alert('Error sending reply: ' + (res.error || 'Unknown'));
+       }
     }
 
     function insertQuickReply(text) {
