@@ -286,18 +286,39 @@ if (isset($_GET['api'])) {
         break;
 
       case 'mark-support-read':
-        require_role(['admin']);
-        if (!empty($input['id'])) {
-          $stmt = $db->prepare("UPDATE qa_support_messages SET is_read=1 WHERE id=?");
-          $stmt->execute([$input['id']]);
+        require_role(['admin', 'tester']);
+        $id = $input['id'] ?? null;
+        if (!$id) {
+          echo json_encode(['error' => 'Missing ID']);
+          break;
+        }
+
+        $user = current_user();
+        if ($user['role'] === 'admin') {
+          // Admin marks 'Admin Unread' (0) as Read (2)
+          $stmt = $db->prepare("UPDATE qa_support_messages SET is_read=2 WHERE id=? AND is_read=0");
+          $stmt->execute([$id]);
+        } else {
+          // User marks 'User Unread' (1) as Read (2)
+          $user_id = $user['id'];
+          // Verify ownership implicitly via user_id check
+          $stmt = $db->prepare("UPDATE qa_support_messages SET is_read=2 WHERE id=? AND user_id=? AND is_read=1");
+          $stmt->execute([$id, $user_id]);
         }
         echo json_encode(['ok' => true]);
         break;
 
       case 'get-unread-support':
-        require_role(['admin']);
-        $stmt = $db->query("SELECT COUNT(*) as count FROM qa_support_messages WHERE is_read=0");
-        echo json_encode($stmt->fetch());
+        require_role(['admin', 'tester']);
+        $user = current_user();
+        if ($user['role'] === 'admin') {
+          $stmt = $db->query("SELECT COUNT(*) as count FROM qa_support_messages WHERE is_read=0");
+          echo json_encode($stmt->fetch());
+        } else {
+          $stmt = $db->prepare("SELECT COUNT(*) as count FROM qa_support_messages WHERE user_id=? AND is_read=1");
+          $stmt->execute([$user['id']]);
+          echo json_encode($stmt->fetch());
+        }
         break;
 
       case 'reply-support':
@@ -7603,9 +7624,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                  </option>
+                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                    </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -9027,10 +9048,7 @@ $TOOL_DEFS = [
         }
         if (tabSupport) {
           tabSupport.textContent = 'Support Center';
-          const c = await api('get-unread-support');
-          if (c && c.count > 0) {
-            tabSupport.innerHTML += ` <span style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:11px;">${c.count}</span>`;
-          }
+          updateSupportBadge();
         }
       } else {
         // Non-admin (User)
@@ -9038,8 +9056,27 @@ $TOOL_DEFS = [
           myTickets.style.display = 'block';
           loadMySupport();
         }
+        if (tabSupport) {
+           updateSupportBadge(); 
+        }
       }
     }
+    
+    async function updateSupportBadge() {
+        const tabSupport = document.querySelector('button[data-tab="support"]');
+        if(!tabSupport) return;
+        try {
+            const c = await api('get-unread-support');
+            // Remove old badge
+            const old = tabSupport.querySelector('span');
+            if(old) old.remove();
+            
+            if (c && c.count > 0) {
+              tabSupport.innerHTML += ` <span id="supp-badge-count" style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:11px;">${c.count}</span>`;
+            }
+        } catch(e) {}
+    }
+    
     enforceRoleUI();
 
     /* Support Logic (Redesign) */
@@ -9142,26 +9179,58 @@ $TOOL_DEFS = [
         let badgeClass = 'badge-low';
         if (t.priority === 'urgent') badgeClass = 'badge-urgent';
         if (t.priority === 'high') badgeClass = 'badge-high';
-        if (t.priority === 'medium') badgeClass = 'badge-medium';
+            if(t.priority === 'medium') badgeClass = 'badge-medium';
+            
+            // Unread Logic
+            // Admin: is_read=0 is unread
+            // User: is_read=1 is unread (replied by admin)
+            const isUnread = (SUPP_ROLE === 'admin' && t.is_read == 0) || (SUPP_ROLE !== 'admin' && t.is_read == 1);
+            const fontWeight = isUnread ? '700' : '400';
+            const dot = isUnread ? '<span style="color:red; font-size:20px; line-height:0; position:absolute; top:10px; right:10px;">&bull;</span>' : '';
 
-        card.innerHTML = `
+            card.innerHTML = `
+               ${dot}
                <div class="t-header">
-                  <span class="t-title">Ticket #${t.id}</span>
+                  <span class="t-title" style="font-weight:${fontWeight}">Ticket #${t.id}</span>
                   <span class="t-badge ${badgeClass}">${t.priority || 'Normal'}</span>
                </div>
-               <div class="t-user" style="font-size:12px; font-weight:600;">${t.subject}</div>
+               <div class="t-user" style="font-size:12px; font-weight:${fontWeight};">${t.subject}</div>
                <div class="t-meta">${t.user_name || 'User'} &bull; ${dateStr}</div>
             `;
         listDiv.appendChild(card);
       });
     }
 
-    function selectTicket(id) {
-      const t = TICKETS_CACHE.find(x => x.id == id);
-      if (!t) return;
-      ACTIVE_TICKET = t;
-
-      // Update Sidebar Active State
+    async function selectTicket(id) {
+        const t = TICKETS_CACHE.find(x => x.id == id);
+        if(!t) return;
+        ACTIVE_TICKET = t;
+        
+        // Mark as read logic
+        // Admin reading (0->2), User reading (1->2)
+        const isUnread = (SUPP_ROLE === 'admin' && t.is_read == 0) || (SUPP_ROLE !== 'admin' && t.is_read == 1);
+        
+        if (isUnread) {
+            // Call API
+            api('mark-support-read', {id: t.id});
+            
+            // Optimistic update
+            t.is_read = 2;
+            renderTicketList(TICKETS_CACHE); // Remove dot/bold
+            
+            // Decrement badge
+            const badge = document.getElementById('supp-badge-count');
+            if(badge) {
+                let count = parseInt(badge.textContent || '0');
+                if(count > 0) {
+                    count--;
+                    badge.textContent = count;
+                    if(count === 0) badge.remove();
+                }
+            }
+        }
+        
+        // Update Sidebar Active State
       document.querySelectorAll('.ticket-card').forEach(c => c.classList.remove('active'));
       // Re-render list to show active state properly (or just toggle class if cached dom elements)
       renderTicketList(TICKETS_CACHE);
