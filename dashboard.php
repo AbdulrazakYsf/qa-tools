@@ -6280,6 +6280,38 @@ $TOOL_DEFS = [
     /* Pre-wrap for messages to support multi-line replies */
     .msg-bubble {
       white-space: pre-wrap;
+      max-width: 80%;
+      margin-bottom: 10px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.4;
+      position: relative;
+      clear: both;
+    }
+
+    .msg-user {
+      background: #fff;
+      color: #333;
+      float: left;
+      border: 1px solid #e0e6ed;
+      border-bottom-left-radius: 2px;
+    }
+
+    .msg-agent {
+      background: #2962ff;
+      /* Blue */
+      color: #fff;
+      float: right;
+      border-bottom-right-radius: 2px;
+    }
+
+    .msg-meta {
+      display: block;
+      margin-top: 4px;
+      font-size: 10px;
+      opacity: 0.7;
+      text-align: right;
     }
 
     :root {
@@ -7601,7 +7633,7 @@ $TOOL_DEFS = [
           document.getElementById('select-all-runs').checked = false;
           updateBulkAction();
         } catch (e) {
-          alert('Error deleting runs: ' + e.message);
+      alert('Error deleting runs: ' + e.message);
     }
       }
     </script>
@@ -7624,9 +7656,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                    </option>
+                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                  </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -9246,25 +9278,53 @@ $TOOL_DEFS = [
       const chatArea = document.getElementById('chat-messages-area');
       chatArea.innerHTML = '';
 
-      // 1. User Message
+      // 1. Initial User Message
       const userMsg = document.createElement('div');
       userMsg.className = 'msg-bubble msg-user';
       userMsg.innerHTML = `
-            ${t.message}
-            <span class="msg-meta">${t.created_at}</span>
-        `;
+          ${t.message}
+          <span class="msg-meta">${t.created_at}</span>
+      `;
       chatArea.appendChild(userMsg);
 
-      // 2. Admin Reply (if exists)
-      if (t.admin_reply) {
-        const adminMsg = document.createElement('div');
-        adminMsg.className = 'msg-bubble msg-agent';
-        adminMsg.innerHTML = `
-                ${t.admin_reply}
-                <span class="msg-meta">${t.reply_at || 'Recently'}</span>
-            `;
-        chatArea.appendChild(adminMsg);
+      // 2. Parse Replies
+      if(t.admin_reply) {
+          // Regex to find "--- Role Reply ---" lines
+          // We split by the separator pattern.
+          // Pattern: \n\n--- (.*?) Reply ---\n
+          // Note: The logic below is a simple parser.
+          
+          let fullText = t.admin_reply;
+          // Split by the separator but keep the delimiter to know who sent it
+          // actually standard split might suck here. Let's use matchAll or logical loop.
+          
+          // Better approach:
+          const parts = fullText.split(/\n\n--- (.*?) Reply ---\n/g);
+          // parts[0] might be empty or text before first separator?
+          // If the reply starts with the separator, parts[0] is empty. 
+          // parts[1] is Role (captured group), parts[2] is Message. parts[3] Role, parts[4] msg...
+          
+          // Example: "\n\n--- Admin Reply ---\nhello" -> ["", "Admin", "hello"]
+          
+          for (let i = 1; i < parts.length; i += 2) {
+             const role = parts[i]; // 'Admin' or 'User'
+             const rawMsg = parts[i+1]; 
+             if(!rawMsg) continue;
+             
+             const msgDiv = document.createElement('div');
+             const isAgent = (role === 'Admin'); // Admin = Right/Blue
+             
+             msgDiv.className = isAgent ? 'msg-bubble msg-agent' : 'msg-bubble msg-user';
+             msgDiv.innerHTML = `
+                ${rawMsg.trim()}
+                <span class="msg-meta">${role}</span>
+             `;
+             chatArea.appendChild(msgDiv);
+          }
       }
+      
+      // Auto scroll
+      chatArea.scrollTop = chatArea.scrollHeight;
     }
 
     async function sendChatMessage() {
@@ -9274,7 +9334,6 @@ $TOOL_DEFS = [
       if (!text) return;
 
       // Admin -> reply-support
-      // User -> in this simple system, maybe create a new ticket or we assume thread support?
       // Current backend `reply-support` is only for admin to reply to a specific user ticket.
       // Users cannot "reply" to a ticket in this simple DB schema (it's 1 q, 1 a).
 
