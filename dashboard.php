@@ -524,7 +524,34 @@ if (isset($_GET['api'])) {
         $s->execute($params);
         $open = (int) $s->fetch()['s'];
 
-        echo json_encode(['total_runs' => $total, 'passed' => $passed, 'failed' => $failed, 'open_issues' => $open]);
+        // METRICS ENHANCEMENT
+
+        // 1. Pass Rate
+        $passRate = 0;
+        if ($total > 0) {
+          $passRate = round(($passed / $total) * 100, 1);
+        }
+
+        // 2. Utilized Tools (Distinct tool_code from results linked to these runs)
+        // Need join
+        $sqlTools = "
+            SELECT COUNT(DISTINCT res.tool_code) as c 
+            FROM qa_run_results res
+            INNER JOIN qa_test_runs tr ON res.run_id = tr.id
+            $where
+        ";
+        $tQuery = $db->prepare($sqlTools);
+        $tQuery->execute($params);
+        $utilized = (int) $tQuery->fetch()['c'];
+
+        echo json_encode([
+          'total_runs' => $total,
+          'passed' => $passed,
+          'failed' => $failed,
+          'open_issues' => $open,
+          'pass_rate' => $passRate,
+          'utilized_tools' => $utilized
+        ]);
         break;
 
       default:
@@ -7517,6 +7544,18 @@ $TOOL_DEFS = [
           <div class="stat-value" id="stat-open">0</div>
           <div class="stat-meta">Total open issues across runs</div>
         </div>
+        <!-- Pass Rate -->
+        <div class="stat-card" style="border-top: 4px solid #8e24aa;">
+          <h3>Pass Rate</h3>
+          <div class="stat-value"><span id="stat-rate">0</span>%</div>
+          <div class="stat-meta">Percentage of passed runs</div>
+        </div>
+        <!-- Utilized Tools -->
+        <div class="stat-card" style="border-top: 4px solid #00acc1;">
+          <h3>Utilized Tools</h3>
+          <div class="stat-value" id="stat-utilized">0</div>
+          <div class="stat-meta">Distinct tools ever run</div>
+        </div>
       </div>
 
       <div class="dashboard-grid">
@@ -7633,8 +7672,8 @@ $TOOL_DEFS = [
           document.getElementById('select-all-runs').checked = false;
           updateBulkAction();
         } catch (e) {
-  alert('Error deleting runs: ' + e.message);
-    }
+          alert('Error deleting runs: ' + e.message);
+        }
       }
     </script>
 
@@ -9037,7 +9076,15 @@ $TOOL_DEFS = [
         document.getElementById('stat-passed').textContent = s.passed;
         document.getElementById('stat-failed').textContent = s.failed;
         document.getElementById('stat-open').textContent = s.open_issues;
-      } catch (e) {
+
+        // New Metric Fields
+        const rateEl = document.getElementById('stat-rate');
+        if (rateEl) rateEl.textContent = s.pass_rate;
+
+        const utilEl = document.getElementById('stat-utilized');
+        if (utilEl) utilEl.textContent = s.utilized_tools;
+
+        } catch (e) {
         console.error('Stats error:', e);
       }
     }
@@ -9089,26 +9136,26 @@ $TOOL_DEFS = [
           loadMySupport();
         }
         if (tabSupport) {
-           updateSupportBadge(); 
+          updateSupportBadge();
         }
       }
     }
-    
+
     async function updateSupportBadge() {
-        const tabSupport = document.querySelector('button[data-tab="support"]');
-        if(!tabSupport) return;
-        try {
-            const c = await api('get-unread-support');
-            // Remove old badge
-            const old = tabSupport.querySelector('span');
-            if(old) old.remove();
-            
-            if (c && c.count > 0) {
-              tabSupport.innerHTML += ` <span id="supp-badge-count" style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:11px;">${c.count}</span>`;
-            }
-        } catch(e) {}
+      const tabSupport = document.querySelector('button[data-tab="support"]');
+      if (!tabSupport) return;
+      try {
+        const c = await api('get-unread-support');
+        // Remove old badge
+        const old = tabSupport.querySelector('span');
+        if (old) old.remove();
+
+        if (c && c.count > 0) {
+          tabSupport.innerHTML += ` <span id="supp-badge-count" style="background:red; color:white; padding:2px 6px; border-radius:10px; font-size:11px;">${c.count}</span>`;
+        }
+      } catch (e) { }
     }
-    
+
     enforceRoleUI();
 
     /* Support Logic (Redesign) */
@@ -9116,16 +9163,16 @@ $TOOL_DEFS = [
     // MOCK STATE REMOVED - Using Real Role
     let SUPP_ROLE = (typeof CURRENT_USER_ROLE !== 'undefined') ? CURRENT_USER_ROLE : 'viewer';
     // Map tester->user for internal logic consistency if needed, but 'tester' is fine.
-    if(SUPP_ROLE === 'tester') SUPP_ROLE = 'user';
+    if (SUPP_ROLE === 'tester') SUPP_ROLE = 'user';
 
     let ACTIVE_TICKET = null;
     let TICKETS_CACHE = [];
 
     // Init
     document.addEventListener('DOMContentLoaded', () => {
-       updateSupportUI();
-       // Auto load if support tab is active (or just load it anyway)
-       loadSupportData();
+      updateSupportUI();
+      // Auto load if support tab is active (or just load it anyway)
+      loadSupportData();
     });
 
     /* Toggle Removed */
@@ -9133,19 +9180,19 @@ $TOOL_DEFS = [
     function updateSupportUI() {
       // Label
       const label = document.getElementById('supp-role-label');
-      if(label) label.textContent = (SUPP_ROLE === 'admin') ? 'Support Agent (Admin)' : 'Support Interface';
+      if (label) label.textContent = (SUPP_ROLE === 'admin') ? 'Support Agent (Admin)' : 'Support Interface';
 
       // Filters - Admin only
       const filters = document.getElementById('supp-filters');
-      if(filters) filters.style.display = (SUPP_ROLE === 'admin') ? 'flex' : 'none';
-      
+      if (filters) filters.style.display = (SUPP_ROLE === 'admin') ? 'flex' : 'none';
+
       // New Ticket Button - User only
       const userActions = document.getElementById('supp-user-actions');
-      if(userActions) userActions.style.display = (SUPP_ROLE === 'admin') ? 'none' : 'block';
+      if (userActions) userActions.style.display = (SUPP_ROLE === 'admin') ? 'none' : 'block';
 
       // Chat Actions (Quick Reply) - Admin only
       const chatActions = document.querySelector('.chat-actions');
-      if(chatActions) chatActions.style.display = (SUPP_ROLE === 'admin') ? 'flex' : 'none';
+      if (chatActions) chatActions.style.display = (SUPP_ROLE === 'admin') ? 'flex' : 'none';
     }
 
     // Load Tickets (Unified function for both roles for now, filtering handled by API/Mock)
@@ -9215,16 +9262,16 @@ $TOOL_DEFS = [
         let badgeClass = 'badge-low';
         if (t.priority === 'urgent') badgeClass = 'badge-urgent';
         if (t.priority === 'high') badgeClass = 'badge-high';
-            if(t.priority === 'medium') badgeClass = 'badge-medium';
-            
-            // Unread Logic
-            // Admin: is_read=0 is unread
-            // User: is_read=1 is unread (replied by admin)
-            const isUnread = (SUPP_ROLE === 'admin' && t.is_read == 0) || (SUPP_ROLE !== 'admin' && t.is_read == 1);
-            const fontWeight = isUnread ? '700' : '400';
-            const dot = isUnread ? '<span style="color:red; font-size:20px; line-height:0; position:absolute; top:10px; right:10px;">&bull;</span>' : '';
+        if (t.priority === 'medium') badgeClass = 'badge-medium';
 
-            card.innerHTML = `
+        // Unread Logic
+        // Admin: is_read=0 is unread
+        // User: is_read=1 is unread (replied by admin)
+        const isUnread = (SUPP_ROLE === 'admin' && t.is_read == 0) || (SUPP_ROLE !== 'admin' && t.is_read == 1);
+        const fontWeight = isUnread ? '700' : '400';
+        const dot = isUnread ? '<span style="color:red; font-size:20px; line-height:0; position:absolute; top:10px; right:10px;">&bull;</span>' : '';
+
+        card.innerHTML = `
                ${dot}
                <div class="t-header">
                   <span class="t-title" style="font-weight:${fontWeight}">Ticket #${t.id}</span>
@@ -9238,35 +9285,35 @@ $TOOL_DEFS = [
     }
 
     async function selectTicket(id) {
-        const t = TICKETS_CACHE.find(x => x.id == id);
-        if(!t) return;
-        ACTIVE_TICKET = t;
-        
-        // Mark as read logic
-        // Admin reading (0->2), User reading (1->2)
-        const isUnread = (SUPP_ROLE === 'admin' && t.is_read == 0) || (SUPP_ROLE !== 'admin' && t.is_read == 1);
-        
-        if (isUnread) {
-            // Call API
-            api('mark-support-read', {id: t.id});
-            
-            // Optimistic update
-            t.is_read = 2;
-            renderTicketList(TICKETS_CACHE); // Remove dot/bold
-            
-            // Decrement badge
-            const badge = document.getElementById('supp-badge-count');
-            if(badge) {
-                let count = parseInt(badge.textContent || '0');
-                if(count > 0) {
-                    count--;
-                    badge.textContent = count;
-                    if(count === 0) badge.remove();
-                }
-            }
+      const t = TICKETS_CACHE.find(x => x.id == id);
+      if (!t) return;
+      ACTIVE_TICKET = t;
+
+      // Mark as read logic
+      // Admin reading (0->2), User reading (1->2)
+      const isUnread = (SUPP_ROLE === 'admin' && t.is_read == 0) || (SUPP_ROLE !== 'admin' && t.is_read == 1);
+
+      if (isUnread) {
+        // Call API
+        api('mark-support-read', { id: t.id });
+
+        // Optimistic update
+        t.is_read = 2;
+        renderTicketList(TICKETS_CACHE); // Remove dot/bold
+
+        // Decrement badge
+        const badge = document.getElementById('supp-badge-count');
+        if (badge) {
+          let count = parseInt(badge.textContent || '0');
+          if (count > 0) {
+            count--;
+            badge.textContent = count;
+            if (count === 0) badge.remove();
+          }
         }
-        
-        // Update Sidebar Active State
+      }
+
+      // Update Sidebar Active State
       document.querySelectorAll('.ticket-card').forEach(c => c.classList.remove('active'));
       // Re-render list to show active state properly (or just toggle class if cached dom elements)
       renderTicketList(TICKETS_CACHE);
@@ -9292,43 +9339,43 @@ $TOOL_DEFS = [
       chatArea.appendChild(userMsg);
 
       // 2. Parse Replies
-      if(t.admin_reply) {
-          // Regex to find "--- Role Reply ---" lines
-          // We split by the separator pattern.
-          // Pattern: \n\n--- (.*?) Reply ---\n
-          // Note: The logic below is a simple parser.
-          
-          let fullText = t.admin_reply;
-          // Split by the separator but keep the delimiter to know who sent it
-          // actually standard split might suck here. Let's use matchAll or logical loop.
-          
-          // Better approach:
-          const parts = fullText.split(/\n\n--- (.*?) Reply ---\n/g);
-          // parts[0] might be empty or text before first separator?
-          // If the reply starts with the separator, parts[0] is empty. 
-          // parts[1] is Role (captured group), parts[2] is Message. parts[3] Role, parts[4] msg...
-          
-          // Example: "\n\n--- Admin Reply ---\nhello" -> ["", "Admin", "hello"]
-          
-          
-          for (let i = 1; i < parts.length; i += 2) {
-             const role = parts[i].trim(); // 'Admin' or 'User'
-             const rawMsg = parts[i+1]; 
-             if(!rawMsg) continue;
-             
-             const msgDiv = document.createElement('div');
-             // Explicit check
-             const isAgent = (role === 'Admin'); 
-             
-             msgDiv.className = isAgent ? 'msg-bubble msg-agent' : 'msg-bubble msg-user';
-             msgDiv.innerHTML = `
+      if (t.admin_reply) {
+        // Regex to find "--- Role Reply ---" lines
+        // We split by the separator pattern.
+        // Pattern: \n\n--- (.*?) Reply ---\n
+        // Note: The logic below is a simple parser.
+
+        let fullText = t.admin_reply;
+        // Split by the separator but keep the delimiter to know who sent it
+        // actually standard split might suck here. Let's use matchAll or logical loop.
+
+        // Better approach:
+        const parts = fullText.split(/\n\n--- (.*?) Reply ---\n/g);
+        // parts[0] might be empty or text before first separator?
+        // If the reply starts with the separator, parts[0] is empty. 
+        // parts[1] is Role (captured group), parts[2] is Message. parts[3] Role, parts[4] msg...
+
+        // Example: "\n\n--- Admin Reply ---\nhello" -> ["", "Admin", "hello"]
+
+
+        for (let i = 1; i < parts.length; i += 2) {
+          const role = parts[i].trim(); // 'Admin' or 'User'
+          const rawMsg = parts[i + 1];
+          if (!rawMsg) continue;
+
+          const msgDiv = document.createElement('div');
+          // Explicit check
+          const isAgent = (role === 'Admin');
+
+          msgDiv.className = isAgent ? 'msg-bubble msg-agent' : 'msg-bubble msg-user';
+          msgDiv.innerHTML = `
                 ${rawMsg.trim()}
                 <span class="msg-meta">${role}</span>
              `;
-             chatArea.appendChild(msgDiv);
-          }
+          chatArea.appendChild(msgDiv);
+        }
       }
-      
+
       // Auto scroll
       chatArea.scrollTop = chatArea.scrollHeight;
     }
@@ -9343,28 +9390,28 @@ $TOOL_DEFS = [
       // Current backend `reply-support` is only for admin to reply to a specific user ticket.
       // Users cannot "reply" to a ticket in this simple DB schema (it's 1 q, 1 a).
 
-       // Unified reply logic
-       const res = await api('reply-support', { id: ACTIVE_TICKET.id, reply: text });
-       if(res.ok) {
-           // Optimistic UI updates
-           const chatArea = document.getElementById('chat-messages-area');
-           const msg = document.createElement('div');
-           msg.className = 'msg-bubble msg-agent'; // Agent style for self (or user style, doesn't matter much for self-view)
-           // If user, maybe style differently? But maintaining one style for "Me" is fine.
-           
-           // Divider visual (mock)
-           const roleName = (SUPP_ROLE==='admin') ? 'Admin' : 'User';
-           const fullText = `\n\n--- ${roleName} Reply ---\n${text}`;
-           
-           msg.innerHTML = `${fullText}<span class="msg-meta">Just now</span>`;
-           chatArea.appendChild(msg);
-           input.value = '';
-           
-           // Reload to get server timestamp/format eventually
-           // loadSupportData(); 
-       } else {
-           alert('Error sending reply: ' + (res.error || 'Unknown'));
-       }
+      // Unified reply logic
+      const res = await api('reply-support', { id: ACTIVE_TICKET.id, reply: text });
+      if (res.ok) {
+        // Optimistic UI updates
+        const chatArea = document.getElementById('chat-messages-area');
+        const msg = document.createElement('div');
+        msg.className = 'msg-bubble msg-agent'; // Agent style for self (or user style, doesn't matter much for self-view)
+        // If user, maybe style differently? But maintaining one style for "Me" is fine.
+
+        // Divider visual (mock)
+        const roleName = (SUPP_ROLE === 'admin') ? 'Admin' : 'User';
+        const fullText = `\n\n--- ${roleName} Reply ---\n${text}`;
+
+        msg.innerHTML = `${fullText}<span class="msg-meta">Just now</span>`;
+        chatArea.appendChild(msg);
+        input.value = '';
+
+        // Reload to get server timestamp/format eventually
+        // loadSupportData(); 
+      } else {
+        alert('Error sending reply: ' + (res.error || 'Unknown'));
+      }
     }
 
     function insertQuickReply(text) {
