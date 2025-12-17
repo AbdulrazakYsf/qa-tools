@@ -158,6 +158,7 @@ Internal use only - Jarir.com QA Team
 
 ## Version History
 
+- **v2.2.0** - Server-Side Tool Migration: Migrated core tools (Add to Cart, Brand, CMS, Products, Category, SKU, Stock) to server-side API architecture for improved reliability and CORS avoidance.
 - **v2.1.0** - Stable Release: Admin Config Loading, Custom Support Priorities, Enhanced Dashboard Stats.
 - **v2.0.0** - Fixed Run All Tests, modular architecture, improved reporting
 - **v1.1.0** - Added Tool vs Pass/Fail Clustered Bar Charts, Pass Rate & Utilized Tool Metrics.

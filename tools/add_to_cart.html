@@ -1,272 +1,423 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Add to Cart Checker (Guest & Logged-in)</title>
-<style>
-  :root{--blue:#007BFF;--bg:#f4f7fa;--card:#fff;--r:10px;--sh:0 4px 12px rgba(0,0,0,.1)}
-  *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif}
-  body{background:var(--bg);display:flex;align-items:center;justify-content:center;min-height:100vh}
-  .container{width:95%;max-width:980px;background:var(--card);padding:20px;border-radius:var(--r);box-shadow:var(--sh)}
-  header{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid var(--blue);padding-bottom:10px;margin-bottom:18px}
-  header img{width:50px;height:50px} header h1{font-size:24px;color:var(--blue);margin:0}
-  fieldset{border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:14px}
-  legend{padding:0 6px;color:#333;font-weight:700}
-  label{display:block;margin:6px 0}
-  textarea, input[type="text"], input[type="number"]{width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font-size:15px}
-  textarea{min-height:120px;resize:vertical}
-  .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
-  button{background:var(--blue);color:#fff;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:15px;font-weight:600;transition:.25s}
-  button:hover{background:#005fd1}
-  .alt{background:#555}.alt:hover{background:#444}
-  .copy{background:#00906d}.copy:hover{background:#007a5c}
-  #loading{display:none;color:#f90;font-weight:700;margin-top:6px}
-  .output{margin-top:14px;padding:16px;background:#f9f9f9;border:1px solid #ddd;border-radius:8px}
-  ul{list-style:none;padding-left:0;margin:0}
-  li{padding:10px 0;border-bottom:1px solid #e1e1e1;line-height:1.35}
-  li:last-child{border-bottom:none}
-  .chip{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;margin-left:6px;border-radius:12px;vertical-align:middle;letter-spacing:.4px}
-  .ok{color:#096b09;background:#d5f7d5}
-  .warn{color:#8d4a00;background:#ffe3c4}
-  .err{color:#a10000;background:#ffd4d4}
-  .meta{font-size:12.5px;color:#555;margin-top:4px;word-break:break-all}
-  .hint{font-size:12.5px;color:#666;margin-top:8px}
-  .country-grid{display:flex;flex-wrap:wrap;gap:12px}
-  .country-grid label{display:flex;align-items:center;gap:8px;border:1px solid #ddd;border-radius:6px;padding:6px 10px;background:#fff;cursor:pointer}
-  .inline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .hidden{display:none}
-  @media(max-width:720px){.row{grid-template-columns:1fr}}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Add to Cart Checker (Guest & Logged-in)</title>
+  <style>
+    :root {
+      --blue: #007BFF;
+      --bg: #f4f7fa;
+      --card: #fff;
+      --r: 10px;
+      --sh: 0 4px 12px rgba(0, 0, 0, .1)
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif
+    }
+
+    body {
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh
+    }
+
+    .container {
+      width: 95%;
+      max-width: 980px;
+      background: var(--card);
+      padding: 20px;
+      border-radius: var(--r);
+      box-shadow: var(--sh)
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid var(--blue);
+      padding-bottom: 10px;
+      margin-bottom: 18px
+    }
+
+    header img {
+      width: 50px;
+      height: 50px
+    }
+
+    header h1 {
+      font-size: 24px;
+      color: var(--blue);
+      margin: 0
+    }
+
+    fieldset {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 14px
+    }
+
+    legend {
+      padding: 0 6px;
+      color: #333;
+      font-weight: 700
+    }
+
+    label {
+      display: block;
+      margin: 6px 0
+    }
+
+    textarea,
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 15px
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px
+    }
+
+    button {
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      transition: .25s
+    }
+
+    button:hover {
+      background: #005fd1
+    }
+
+    .alt {
+      background: #555
+    }
+
+    .alt:hover {
+      background: #444
+    }
+
+    .copy {
+      background: #00906d
+    }
+
+    .copy:hover {
+      background: #007a5c
+    }
+
+    #loading {
+      display: none;
+      color: #f90;
+      font-weight: 700;
+      margin-top: 6px
+    }
+
+    .output {
+      margin-top: 14px;
+      padding: 16px;
+      background: #f9f9f9;
+      border: 1px solid #ddd;
+      border-radius: 8px
+    }
+
+    ul {
+      list-style: none;
+      padding-left: 0;
+      margin: 0
+    }
+
+    li {
+      padding: 10px 0;
+      border-bottom: 1px solid #e1e1e1;
+      line-height: 1.35
+    }
+
+    li:last-child {
+      border-bottom: none
+    }
+
+    .chip {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      margin-left: 6px;
+      border-radius: 12px;
+      vertical-align: middle;
+      letter-spacing: .4px
+    }
+
+    .ok {
+      color: #096b09;
+      background: #d5f7d5
+    }
+
+    .warn {
+      color: #8d4a00;
+      background: #ffe3c4
+    }
+
+    .err {
+      color: #a10000;
+      background: #ffd4d4
+    }
+
+    .meta {
+      font-size: 12.5px;
+      color: #555;
+      margin-top: 4px;
+      word-break: break-all
+    }
+
+    .hint {
+      font-size: 12.5px;
+      color: #666;
+      margin-top: 8px
+    }
+
+    .country-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px
+    }
+
+    .country-grid label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 6px 10px;
+      background: #fff;
+      cursor: pointer
+    }
+
+    .inline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap
+    }
+
+    .hidden {
+      display: none
+    }
+
+    @media(max-width:720px) {
+      .row {
+        grid-template-columns: 1fr
+      }
+    }
+  </style>
 </head>
+
 <body>
-<div class="container">
-  <header>
-    <img src="crawler.png" alt="Logo">
-    <h1>Add to Cart Checker</h1>
-  </header>
+  <div class="container">
+    <header>
+      <img src="crawler.png" alt="Logo">
+      <h1>Add to Cart Checker</h1>
+    </header>
 
-  <fieldset>
-    <legend>Mode</legend>
-    <div class="inline">
-      <label class="inline"><input type="radio" name="mode" value="guest" checked> Guest</label>
-      <label class="inline"><input type="radio" name="mode" value="loggedin"> Logged-in (login per country)</label>
-    </div>
-  </fieldset>
+    <fieldset>
+      <legend>Mode</legend>
+      <div class="inline">
+        <label class="inline"><input type="radio" name="mode" value="guest" checked> Guest</label>
+        <label class="inline"><input type="radio" name="mode" value="loggedin"> Logged-in (login per country)</label>
+      </div>
+    </fieldset>
 
-  <fieldset id="loginBox" class="hidden">
-    <legend>Login Credentials (single JSON object)</legend>
-    <label for="loginJson">Example:
-      <code>{"username":"0533645794","password":"Jarir13245!"}</code>
-    </label>
-    <textarea id="loginJson" placeholder='{"username":"0533645794","password":"Jarir13245!"}'></textarea>
-    <div class="hint">We'll call <code>/api/v2/&lt;store&gt;/user/login-v2</code> for each selected country and use <code>token</code> + <code>quote_id</code> returned for that country.</div>
-  </fieldset>
+    <fieldset id="loginBox" class="hidden">
+      <legend>Login Credentials (single JSON object)</legend>
+      <label for="loginJson">Example:
+        <code>{"username":"0533645794","password":"Jarir13245!"}</code>
+      </label>
+      <textarea id="loginJson" placeholder='{"username":"0533645794","password":"Jarir13245!"}'></textarea>
+      <div class="hint">We'll call <code>/api/v2/&lt;store&gt;/user/login-v2</code> for each selected country and use
+        <code>token</code> + <code>quote_id</code> returned for that country.</div>
+    </fieldset>
 
-  <fieldset>
-    <legend>Countries</legend>
-    <div class="country-grid">
-      <label><input type="checkbox" class="country" value="SA" checked> Saudi Arabia (SA)</label>
-      <label><input type="checkbox" class="country" value="AE"> United Arab Emirates (AE)</label>
-      <label><input type="checkbox" class="country" value="KW"> Kuwait (KW)</label>
-      <label><input type="checkbox" class="country" value="QA"> Qatar (QA)</label>
-      <label><input type="checkbox" class="country" value="BH"> Bahrain (BH)</label>
-    </div>
-    <div class="hint">Multiple selection supported—each country is processed independently.</div>
-  </fieldset>
+    <fieldset>
+      <legend>Countries</legend>
+      <div class="country-grid">
+        <label><input type="checkbox" class="country" value="SA" checked> Saudi Arabia (SA)</label>
+        <label><input type="checkbox" class="country" value="AE"> United Arab Emirates (AE)</label>
+        <label><input type="checkbox" class="country" value="KW"> Kuwait (KW)</label>
+        <label><input type="checkbox" class="country" value="QA"> Qatar (QA)</label>
+        <label><input type="checkbox" class="country" value="BH"> Bahrain (BH)</label>
+      </div>
+      <div class="hint">Multiple selection supported—each country is processed independently.</div>
+    </fieldset>
 
-  <fieldset>
-    <legend>SKUs</legend>
-    <label for="skus">Enter SKUs (one per line):</label>
-    <textarea id="skus" placeholder="642528
+    <fieldset>
+      <legend>SKUs</legend>
+      <label for="skus">Enter SKUs (one per line):</label>
+      <textarea id="skus" placeholder="642528
 650944
 623548"></textarea>
-    <div class="row">
-      <div>
-        <label for="qty">Default Qty (applied to all SKUs):</label>
-        <input type="number" id="qty" min="1" value="1">
+      <div class="row">
+        <div>
+          <label for="qty">Default Qty (applied to all SKUs):</label>
+          <input type="number" id="qty" min="1" value="1">
+        </div>
+        <div class="hint">We use <code>updateMultiple</code> with these SKUs bundled per country.</div>
       </div>
-      <div class="hint">We use <code>updateMultiple</code> with these SKUs bundled per country.</div>
+    </fieldset>
+
+    <div class="actions">
+      <button onclick="run()">Run Add to Cart</button>
+      <button class="alt" onclick="clearSession()">Clear</button>
+      <button class="copy" onclick="copyVisible()">Copy Visible Results</button>
     </div>
-  </fieldset>
+    <div id="loading">Processing… please wait</div>
 
-  <div class="actions">
-    <button onclick="run()">Run Add to Cart</button>
-    <button class="alt" onclick="clearSession()">Clear</button>
-    <button class="copy" onclick="copyVisible()">Copy Visible Results</button>
-  </div>
-  <div id="loading">Processing… please wait</div>
-
-  <div class="output">
-    <ul id="results"></ul>
-    <p id="empty" style="display:none;color:#c00;font-weight:600">No results to show.</p>
-    <div class="hint">
-      <strong>Guest:</strong> <code>POST /api/v2/&lt;store&gt;/cart/createv2</code> → use <code>data.result</code> as <code>quoteId</code> in <code>updateMultiple</code> (no token).<br>
-      <strong>Logged-in:</strong> <code>POST /api/v2/&lt;store&gt;/user/login-v2</code> → use <code>token</code> header <code>currenttoken</code> and <code>quote_id</code>.
+    <div class="output">
+      <ul id="results"></ul>
+      <p id="empty" style="display:none;color:#c00;font-weight:600">No results to show.</p>
+      <div class="hint">
+        <strong>Guest:</strong> <code>POST /api/v2/&lt;store&gt;/cart/createv2</code> → use <code>data.result</code> as
+        <code>quoteId</code> in <code>updateMultiple</code> (no token).<br>
+        <strong>Logged-in:</strong> <code>POST /api/v2/&lt;store&gt;/user/login-v2</code> → use <code>token</code>
+        header <code>currenttoken</code> and <code>quote_id</code>.
+      </div>
     </div>
   </div>
-</div>
 
-<script>
-/* ---------- Country → store + code mapping ---------- */
-const COUNTRY_MAP = {
-  SA: {store:'sa_en', code:'SA'},
-  AE: {store:'ae_en', code:'AE'},
-  KW: {store:'kw_en', code:'KW'},
-  QA: {store:'qa_en', code:'QA'},
-  BH: {store:'bh_en', code:'BH'}
-};
-
-const LOGIN_API   = (store)=>`https://www.jarir.com/api/v2/${store}/user/login-v2`;
-const CART_API    = (store)=>`https://www.jarir.com/api/v2/${store}/cart/updateMultiple`;
-const CREATE_GUEST= (store)=>`https://www.jarir.com/api/v2/${store}/cart/createv2`;
-
-/* ---------- State ---------- */
-let rows = []; // {country, store, status, ok, message, details}
-
-/* ---------- UI Wiring ---------- */
-document.querySelectorAll('input[name="mode"]').forEach(r=>{
-  r.addEventListener('change', ()=>{
-    document.getElementById('loginBox')
-      .classList.toggle('hidden', getMode()!=='loggedin');
-  });
-});
-
-function getMode(){ return document.querySelector('input[name="mode"]:checked').value; }
-
-/* ---------- Main ---------- */
-async function run(){
-  toggleLoading(true);
-  clearResults();
-
-  const selected = [...document.querySelectorAll('.country:checked')].map(i=>i.value);
-  if(!selected.length){ alert('Please select at least one country.'); toggleLoading(false); return; }
-
-  const qty = Math.max(1, parseInt(document.getElementById('qty').value||'1',10));
-  const skus = document.getElementById('skus').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-  if(!skus.length){ alert('Please enter at least one SKU.'); toggleLoading(false); return; }
-  const skusArray = skus.map(s=>({sku:s, qty}));
-
-  let creds=null;
-  if(getMode()==='loggedin'){
-    const raw = document.getElementById('loginJson').value.trim();
-    if(!raw){ alert('Please paste login JSON.'); toggleLoading(false); return; }
-    try{
-      const parsed = JSON.parse(raw);
-      const username=(parsed?.username??'').toString().trim();
-      const password=(parsed?.password??'').toString();
-      if(!username || !password){ throw new Error('Login JSON must include "username" and "password".'); }
-      creds={username,password};
-    }catch(e){
-      alert('Invalid login JSON: '+e.message);
-      toggleLoading(false);
-      return;
-    }
-  }
-
-  // Process each country independently
-  for(const country of selected){
-    const map = COUNTRY_MAP[country];
-    if(!map){ pushRow({country, store:'?', ok:false, status:'ERROR', message:'Unknown country mapping', details:{}}); render(); continue; }
-
-    let token='', quoteId=null;
-
-    if(getMode()==='loggedin'){
-      // country-specific login
-      try{
-        const loginResp = await fetch(LOGIN_API(map.store),{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({username:creds.username, password:creds.password})
-        }).then(r=>r.json());
-
-        const success = loginResp?.success===true && !!(loginResp?.data?.token);
-        if(!success){
-          pushRow({country, store:map.store, ok:false, status:'ERROR',
-            message:`Login failed: ${loginResp?.message||'Unknown'} (${loginResp?.type||''})`, details:loginResp});
-          render();
-          continue; // Skip A2C for this country but continue others
-        }
-        token   = loginResp.data.token || '';
-        quoteId = loginResp.data.quote_id ?? null;
-        pushRow({country, store:map.store, ok:true, status:'OK', message:'Login success', details:{token,quoteId}});
-        render();
-      }catch(e){
-        pushRow({country, store:map.store, ok:false, status:'ERROR', message:'Login request failed: '+e.message, details:{}});
-        render();
-        continue;
-      }
-    }else{
-      // Guest: create guest quote first (per country)
-      try{
-        const guestResp = await fetch(CREATE_GUEST(map.store),{
-          method:'POST'
-        }).then(r=>r.json());
-        const resultId = guestResp?.data?.result || '';
-        if(!resultId){
-          pushRow({country, store:map.store, ok:false, status:'ERROR', message:'Guest quote creation failed', details:guestResp});
-          render();
-          continue;
-        }
-        quoteId = resultId;
-        pushRow({country, store:map.store, ok:true, status:'OK', message:'Guest quote created', details:{quoteId}});
-        render();
-      }catch(e){
-        pushRow({country, store:map.store, ok:false, status:'ERROR', message:'Guest quote request failed: '+e.message, details:{}});
-        render();
-        continue;
-      }
-    }
-
-    // Prepare add-to-cart payload
-    const body = {
-      cartItem: {
-        skus: skusArray,
-        extension_attributes: { country_code: map.code }
-      }
+  <script>
+    /* ---------- Country → store + code mapping ---------- */
+    const COUNTRY_MAP = {
+      SA: { store: 'sa_en', code: 'SA' },
+      AE: { store: 'ae_en', code: 'AE' },
+      KW: { store: 'kw_en', code: 'KW' },
+      QA: { store: 'qa_en', code: 'QA' },
+      BH: { store: 'bh_en', code: 'BH' }
     };
-    // Both flows now require quoteId (guest uses createv2 result; logged-in uses login quote_id)
-    if(quoteId!=null){ body.cartItem.quoteId = quoteId; }
 
-    const headers = {'Content-Type':'application/json'};
-    if(getMode()==='loggedin' && token){
-      headers['currenttoken'] = token;
-    }
+    const LOGIN_API = (store) => `https://www.jarir.com/api/v2/${store}/user/login-v2`;
+    const CART_API = (store) => `https://www.jarir.com/api/v2/${store}/cart/updateMultiple`;
+    const CREATE_GUEST = (store) => `https://www.jarir.com/api/v2/${store}/cart/createv2`;
 
-    // Call updateMultiple
-    try{
-      const resp = await fetch(CART_API(map.store),{
-        method:'POST', headers, body: JSON.stringify(body)
+    /* ---------- State ---------- */
+    let rows = []; // {country, store, status, ok, message, details}
+
+    /* ---------- UI Wiring ---------- */
+    document.querySelectorAll('input[name="mode"]').forEach(r => {
+      r.addEventListener('change', () => {
+        document.getElementById('loginBox')
+          .classList.toggle('hidden', getMode() !== 'loggedin');
       });
-      const data = await resp.json().catch(()=>({}));
-      const ok = data?.success===true;
-      const status = ok ? 'OK' : (resp.ok ? 'WARN' : 'ERROR');
-      const message = (data?.message || (ok?'Added to cart':'Not added')).toString();
-      pushRow({country, store:map.store, ok, status, message, details:data});
-      render();
-    }catch(e){
-      pushRow({country, store:map.store, ok:false, status:'ERROR', message:'Add to cart failed: '+e.message, details:{}});
-      render();
+    });
+
+    function getMode() { return document.querySelector('input[name="mode"]:checked').value; }
+
+    /* ---------- Main ---------- */
+    async function run() {
+      toggleLoading(true);
+      clearResults();
+
+      const selected = [...document.querySelectorAll('.country:checked')].map(i => i.value);
+      if (!selected.length) { alert('Please select at least one country.'); toggleLoading(false); return; }
+
+      const qty = Math.max(1, parseInt(document.getElementById('qty').value || '1', 10));
+      const skus = document.getElementById('skus').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      if (!skus.length) { alert('Please enter at least one SKU.'); toggleLoading(false); return; }
+      const skusArray = skus.map(s => ({ sku: s, qty }));
+
+      let loginJson = null; // Changed var name
+      if (getMode() === 'loggedin') {
+        const raw = document.getElementById('loginJson').value.trim();
+        if (!raw) { alert('Please paste login JSON.'); toggleLoading(false); return; }
+        try {
+          const parsed = JSON.parse(raw);
+          const username = (parsed?.username ?? '').toString().trim();
+          const password = (parsed?.password ?? '').toString();
+          if (!username || !password) { throw new Error('Login JSON must include "username" and "password".'); }
+          loginJson = { username, password };
+        } catch (e) {
+          alert('Invalid login JSON: ' + e.message);
+          toggleLoading(false);
+          return;
+        }
+      }
+
+      try {
+        // Use parent.api if available (iframe mode), otherwise fail or mock
+        if (!window.parent || !window.parent.api) {
+          throw new Error('This tool must be run within the Dashboard logic.');
+        }
+
+        const res = await window.parent.api('run-tool', {
+          code: 'add_to_cart',
+          input: {
+            mode: getMode(),
+            countries: selected,
+            skus: skusArray,
+            loginJson: loginJson
+          }
+        });
+
+        if (res.rows) {
+          rows = res.rows;
+          render();
+        } else {
+          // Check if error
+          if (res.error) alert('Error: ' + res.error);
+          else pushRow({ country: '-', store: '-', ok: false, status: 'ERROR', message: 'No rows returned', details: res });
+          render();
+        }
+
+      } catch (e) {
+        console.error(e);
+        pushRow({ country: '-', store: '-', ok: false, status: 'ERROR', message: e.message, details: {} });
+        render();
+      }
+
+      toggleLoading(false);
     }
-  }
 
-  toggleLoading(false);
-}
+    /* ---------- Rows / Render ---------- */
+    function pushRow({ country, store, ok, status, message, details }) {
+      rows.push({ country, store, ok, status, message, details });
+    }
 
-/* ---------- Rows / Render ---------- */
-function pushRow({country,store,ok,status,message,details}){
-  rows.push({country, store, ok, status, message, details});
-}
-
-function render(){
-  const ul=document.getElementById('results'); ul.innerHTML='';
-  rows.forEach(r=>{
-    const cls = r.status==='OK' ? 'ok' : (r.status==='WARN' ? 'warn' : 'err');
-    const pretty = safeStr(r.details);
-    const li = document.createElement('li');
-    li.className = cls;
-    li.innerHTML = `
+    function render() {
+      const ul = document.getElementById('results'); ul.innerHTML = '';
+      rows.forEach(r => {
+        const cls = r.status === 'OK' ? 'ok' : (r.status === 'WARN' ? 'warn' : 'err');
+        const pretty = safeStr(r.details);
+        const li = document.createElement('li');
+        li.className = cls;
+        li.innerHTML = `
       <strong>${r.country}</strong> → Store: <code>${r.store}</code>
       <span class="chip ${cls}">${r.status}</span>
       <div class="meta">
@@ -274,42 +425,43 @@ function render(){
         <details style="margin-top:6px"><summary>Response</summary><pre style="white-space:pre-wrap">${escapeHtml(pretty)}</pre></details>
       </div>
     `;
-    ul.appendChild(li);
-  });
-  document.getElementById('empty').style.display = rows.length ? 'none':'block';
-}
+        ul.appendChild(li);
+      });
+      document.getElementById('empty').style.display = rows.length ? 'none' : 'block';
+    }
 
-function clearResults(){
-  rows = [];
-  document.getElementById('results').innerHTML='';
-  document.getElementById('empty').style.display='none';
-}
+    function clearResults() {
+      rows = [];
+      document.getElementById('results').innerHTML = '';
+      document.getElementById('empty').style.display = 'none';
+    }
 
-function clearSession(){
-  clearResults();
-  document.getElementById('skus').value='';
-  document.getElementById('qty').value='1';
-  document.getElementById('loginJson').value='';
-  document.querySelector('input[name="mode"][value="guest"]').checked = true;
-  document.getElementById('loginBox').classList.add('hidden');
-  document.querySelectorAll('.country').forEach(el=>{ el.checked = (el.value==='SA'); });
-  toggleLoading(false);
-}
+    function clearSession() {
+      clearResults();
+      document.getElementById('skus').value = '';
+      document.getElementById('qty').value = '1';
+      document.getElementById('loginJson').value = '';
+      document.querySelector('input[name="mode"][value="guest"]').checked = true;
+      document.getElementById('loginBox').classList.add('hidden');
+      document.querySelectorAll('.country').forEach(el => { el.checked = (el.value === 'SA'); });
+      toggleLoading(false);
+    }
 
-function copyVisible(){
-  const items=[...document.querySelectorAll('#results li')].map(li=>li.innerText.trim());
-  if(!items.length){alert('Nothing to copy.');return;}
-  navigator.clipboard.writeText(items.join('\n\n')).then(()=>alert('Copied!'));
-}
+    function copyVisible() {
+      const items = [...document.querySelectorAll('#results li')].map(li => li.innerText.trim());
+      if (!items.length) { alert('Nothing to copy.'); return; }
+      navigator.clipboard.writeText(items.join('\n\n')).then(() => alert('Copied!'));
+    }
 
-function toggleLoading(on){ document.getElementById('loading').style.display = on ? 'block' : 'none'; }
+    function toggleLoading(on) { document.getElementById('loading').style.display = on ? 'block' : 'none'; }
 
-/* ---------- utils ---------- */
-function safeStr(o){ try{return JSON.stringify(o,null,2);}catch{return String(o);} }
-function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-</script>
-<script>
-  window.QA_TOOL_ID = 'add_to_cart';
-</script>
+    /* ---------- utils ---------- */
+    function safeStr(o) { try { return JSON.stringify(o, null, 2); } catch { return String(o); } }
+    function escapeHtml(s) { return (s || '').toString().replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  </script>
+  <script>
+    window.QA_TOOL_ID = 'add_to_cart';
+  </script>
 </body>
+
 </html>

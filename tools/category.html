@@ -1,414 +1,541 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Category Link Checker</title>
-<style>
- :root{
-   --blue:#007BFF;
-   --bg:#f4f7fa;
-   --card:#fff;
-   --radius:10px;
-   --shadow:0 4px 12px rgba(0,0,0,.1);
-   --ok:#2e7d32;
-   --warn:#d84315;
-   --warnNT:#ef6c00;
-   --err:#b00020;
-   --badge-bg:#eceff1;
-   --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
- }
- *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif}
- body{
-   background:var(--bg);
-   min-height:100vh;
-   display:flex;
-   align-items:center;
-   justify-content:center;
-   padding:18px;
-   color:#222;
- }
- .container{
-   width:100%;max-width:960px;
-   background:var(--card);
-   border-radius:var(--radius);
-   box-shadow:var(--shadow);
-   padding:24px 26px 30px;
-   display:flex;
-   flex-direction:column;
-   gap:14px;
- }
- header{
-   display:flex;
-   align-items:center;
-   justify-content:space-between;
-   padding-bottom:12px;
-   border-bottom:2px solid var(--blue);
- }
- header h1{font-size:24px;color:var(--blue);margin:0}
- header img{width:54px;height:54px}
-
- textarea{
-   width:100%;height:150px;
-   padding:12px 14px;
-   border:1px solid #cbd3dc;
-   border-radius:8px;
-   font-size:15px;
-   resize:vertical;
- }
-
- .controls{display:flex;flex-wrap:wrap;gap:10px}
- button{
-   background:var(--blue);
-   border:none;
-   color:#fff;
-   padding:10px 18px;
-   font-size:15px;
-   border-radius:7px;
-   cursor:pointer;
-   line-height:1.1;
-   display:inline-flex;
-   align-items:center;
-   gap:6px;
-   transition:.25s;
- }
- button:hover{background:#005ed0}
- button.secondary{background:#546e7a}
- button.secondary:hover{background:#455a64}
- button.copy{background:#00906d}
- button.copy:hover{background:#007354}
-
- #loading{display:none;font-weight:600;color:#f90}
-
- .panel{
-   margin-top:4px;
-   padding:20px 20px 26px;
-   background:#f9fafb;
-   border:1px solid #dfe5eb;
-   border-radius:10px;
- }
- .panel h3{margin-top:0;margin-bottom:14px;font-size:20px;color:#333}
-
- .filters{
-   display:flex;
-   flex-wrap:wrap;
-   gap:14px;
-   margin-bottom:10px;
-   align-items:flex-end;
- }
- .filters label{
-   font-size:14px;
-   font-weight:600;
-   color:#333;
-   display:flex;
-   flex-direction:column;
-   gap:6px;
- }
- select,input[type=text]{
-   min-width:210px;
-   padding:8px 10px;
-   border:1px solid #bfc9d3;
-   border-radius:6px;
-   font-size:14px;
-   background:#fff;
- }
- input::placeholder{color:#999}
-
- ul#results{list-style:none;margin:0;padding:0}
- ul#results li{
-   padding:10px 10px 12px;
-   border-bottom:1px solid #e3e8ee;
-   display:flex;
-   flex-direction:column;
-   gap:4px;
-   font-size:14px;
- }
- ul#results li:last-child{border-bottom:none}
-
- a{color:#0d47a1;text-decoration:none;word-break:break-all}
- a:hover{text-decoration:underline}
-
- .status-badge{
-   display:inline-block;
-   font-size:11px;
-   letter-spacing:.5px;
-   font-weight:700;
-   padding:3px 8px 4px;
-   border-radius:100px;
-   background:var(--badge-bg);
-   color:#37474f;
-   vertical-align:middle;
-   font-family:var(--mono);
- }
- .ok    .status-badge{background:var(--ok);color:#fff}
- .warn  .status-badge{background:var(--warn);color:#fff}
- .warnnt.status-badge,
- .warnnt .status-badge{background:var(--warnNT);color:#fff}
- .err   .status-badge{background:var(--err);color:#fff}
-
- .meta-line{font-size:12px;color:#555}
- .empty-msg{color:#d32f2f;font-weight:600;margin:6px 4px 2px}
-
- .legend{
-   margin-top:18px;
-   font-size:12.5px;
-   line-height:1.5;
-   color:#455a64;
-   display:flex;
-   flex-direction:column;
-   gap:4px;
- }
- .legend strong{font-weight:600}
- .legend .row{
-   display:flex;
-   align-items:center;
-   gap:8px;
- }
-
- footer{margin-top:22px;text-align:center;font-size:13px;color:#888}
-
- @media(max-width:620px){
-   .filters label{width:100%}
-   select,input[type=text]{min-width:unset;width:100%}
-   button{flex:1 1 auto}
- }
-</style>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body>
-<div class="container">
-  <header>
-    <img src="crawler.png" alt="Logo">
-    <h1>Category Link Checker</h1>
-  </header>
-
-  <label for="urlInput" style="font-weight:600;font-size:14px;">Enter page-v2 URLs (one per line):</label>
-  <textarea id="urlInput" placeholder="https://www.jarir.com/api/v2/sa_en/cmspage/page-v2/123"></textarea>
-
-  <div class="controls">
-    <button onclick="run()">Fetch JSON & Generate Links</button>
-    <button class="secondary" onclick="clearSession()">Clear Session</button>
-    <button class="copy" onclick="copyVisible()">Copy Visible Links</button>
-  </div>
-
-  <div id="loading">Processing… please wait</div>
-
-  <div class="panel">
-    <h3>Generated Links</h3>
-    <div class="filters">
-      <label>
-        Status Filter
-        <select id="statusFilter" onchange="applyFilters()">
-          <option value="all">Show All</option>
-          <option value="OK">OK</option>
-          <option value="Warning">Warning</option>
-          <option value="WarningNT">Warning NT</option>
-        </select>
-      </label>
-      <label>
-        Parent URL Filter
-        <input id="parentFilter" type="text" placeholder="part of parent URL" oninput="applyFilters()">
-      </label>
-    </div>
-
-    <ul id="results"></ul>
-    <p id="empty" class="empty-msg" style="display:none;">No category links found for current filters.</p>
-
-    <div class="legend">
-      <div class="row"><span class="status-badge ok">OK</span> <strong>OK</strong> – Category returns products (hits > 0).</div>
-      <div class="row"><span class="status-badge warn">WARN</span> <strong>Warning</strong> – Category returns no products (empty hits).</div>
-      <div class="row"><span class="status-badge warnnt">W‑NT</span> <strong>Warning NT</strong> – *Warning* **with numeric category ID only** (subset of Warning).</div>
-      <div class="row"><span class="status-badge err">ERR</span> <strong>Error</strong> – Fetch / parse problem (shown only under “Show All”).</div>
-    </div>
-  </div>
-
-  <footer>© 2024 Category Link Checker</footer>
-</div>
-
-<script>
-/* ───────── State ───────── */
-const rows=[];               // {link,parent,status,isNumeric}
-const processedParents=new Set();
-const generatedLinks=new Set();
-
-/* ───────── Runner ───────── */
-async function run(){
-  setLoading(true);
-  const raw=document.getElementById('urlInput').value.trim();
-  const parents=raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-  if(!parents.length){alert('Please enter at least one valid URL.');setLoading(false);return;}
-
-  for(const parent of parents){
-    if(processedParents.has(parent)) continue;
-    processedParents.add(parent);
-    try{
-      const r=await fetch(parent);
-      if(!r.ok) throw new Error('Network response not ok');
-      const j=await r.json();
-      const catIds=extractCategories(j);
-      const {baseUrl1,store}=splitBase(parent);
-
-      const links=catIds.map(id=>`${baseUrl1}catalogv1/category/store/${store}/category_ids/${id}`);
-
-      links.forEach(l=>{
-        if(generatedLinks.has(l)) return;
-        generatedLinks.add(l);
-        const idMatch=l.match(/\/category_ids\/([^/]+)/i);
-        const catId=idMatch?decodeURIComponent(idMatch[1]):'';
-        const isNumeric=/^\d+$/.test(catId);
-        rows.push({link:l,parent,status:'PENDING',isNumeric});
-      });
-
-    }catch(e){
-      rows.push({link:`(Error loading parent) ${parent}`,parent,status:'Error',isNumeric:false});
-      console.error(e);
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Category Link Checker</title>
+  <style>
+    :root {
+      --blue: #007BFF;
+      --bg: #f4f7fa;
+      --card: #fff;
+      --radius: 10px;
+      --shadow: 0 4px 12px rgba(0, 0, 0, .1);
+      --ok: #2e7d32;
+      --warn: #d84315;
+      --warnNT: #ef6c00;
+      --err: #b00020;
+      --badge-bg: #eceff1;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     }
-  }
 
-  await validate();
-  setLoading(false);
-  render();
-  applyFilters();
-}
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif
+    }
 
-/* ───────── Helpers ───────── */
-function splitBase(u){
-  const baseUrl1=u.split('/api')[0]+'/api/';
-  const store=u.split('/')[5].replace('_','-');
-  return {baseUrl1,store};
-}
+    body {
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      color: #222;
+    }
 
-/* Extract categories (legacy + new style, | separated, unique) */
-function extractCategories(json){
-  const items=json?.data?.cms_items?.items||[];
-  const found=[];
-  items.forEach(({item})=>{
-    const tokens=item.split('||');
+    .container {
+      width: 100%;
+      max-width: 960px;
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 24px 26px 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
 
-    // NEW STYLE: token == 'category'
-    tokens.forEach((tok,i)=>{
-      if(tok.trim().toLowerCase()==='category' && tokens[i+1]){
-        tokens[i+1].split('|').forEach(id=>{
-          id=id.trim();
-          if(id) found.push(id);
-        });
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--blue);
+    }
+
+    header h1 {
+      font-size: 24px;
+      color: var(--blue);
+      margin: 0
+    }
+
+    header img {
+      width: 54px;
+      height: 54px
+    }
+
+    textarea {
+      width: 100%;
+      height: 150px;
+      padding: 12px 14px;
+      border: 1px solid #cbd3dc;
+      border-radius: 8px;
+      font-size: 15px;
+      resize: vertical;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px
+    }
+
+    button {
+      background: var(--blue);
+      border: none;
+      color: #fff;
+      padding: 10px 18px;
+      font-size: 15px;
+      border-radius: 7px;
+      cursor: pointer;
+      line-height: 1.1;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: .25s;
+    }
+
+    button:hover {
+      background: #005ed0
+    }
+
+    button.secondary {
+      background: #546e7a
+    }
+
+    button.secondary:hover {
+      background: #455a64
+    }
+
+    button.copy {
+      background: #00906d
+    }
+
+    button.copy:hover {
+      background: #007354
+    }
+
+    #loading {
+      display: none;
+      font-weight: 600;
+      color: #f90
+    }
+
+    .panel {
+      margin-top: 4px;
+      padding: 20px 20px 26px;
+      background: #f9fafb;
+      border: 1px solid #dfe5eb;
+      border-radius: 10px;
+    }
+
+    .panel h3 {
+      margin-top: 0;
+      margin-bottom: 14px;
+      font-size: 20px;
+      color: #333
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 10px;
+      align-items: flex-end;
+    }
+
+    .filters label {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    select,
+    input[type=text] {
+      min-width: 210px;
+      padding: 8px 10px;
+      border: 1px solid #bfc9d3;
+      border-radius: 6px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    input::placeholder {
+      color: #999
+    }
+
+    ul#results {
+      list-style: none;
+      margin: 0;
+      padding: 0
+    }
+
+    ul#results li {
+      padding: 10px 10px 12px;
+      border-bottom: 1px solid #e3e8ee;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 14px;
+    }
+
+    ul#results li:last-child {
+      border-bottom: none
+    }
+
+    a {
+      color: #0d47a1;
+      text-decoration: none;
+      word-break: break-all
+    }
+
+    a:hover {
+      text-decoration: underline
+    }
+
+    .status-badge {
+      display: inline-block;
+      font-size: 11px;
+      letter-spacing: .5px;
+      font-weight: 700;
+      padding: 3px 8px 4px;
+      border-radius: 100px;
+      background: var(--badge-bg);
+      color: #37474f;
+      vertical-align: middle;
+      font-family: var(--mono);
+    }
+
+    .ok .status-badge {
+      background: var(--ok);
+      color: #fff
+    }
+
+    .warn .status-badge {
+      background: var(--warn);
+      color: #fff
+    }
+
+    .warnnt.status-badge,
+    .warnnt .status-badge {
+      background: var(--warnNT);
+      color: #fff
+    }
+
+    .err .status-badge {
+      background: var(--err);
+      color: #fff
+    }
+
+    .meta-line {
+      font-size: 12px;
+      color: #555
+    }
+
+    .empty-msg {
+      color: #d32f2f;
+      font-weight: 600;
+      margin: 6px 4px 2px
+    }
+
+    .legend {
+      margin-top: 18px;
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: #455a64;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .legend strong {
+      font-weight: 600
+    }
+
+    .legend .row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    footer {
+      margin-top: 22px;
+      text-align: center;
+      font-size: 13px;
+      color: #888
+    }
+
+    @media(max-width:620px) {
+      .filters label {
+        width: 100%
       }
-    });
 
-    // LEGACY segments containing ",category,<ids>"
-    tokens.forEach(seg=>{
-      const parts=seg.split(',');
-      const idx=parts.indexOf('category');
-      if(idx!==-1 && parts[idx+1]){
-        parts[idx+1].split('|').forEach(id=>{
-          id=id.trim();
-          if(id) found.push(id);
-        });
+      select,
+      input[type=text] {
+        min-width: unset;
+        width: 100%
       }
-    });
-  });
-  return [...new Set(found)];
-}
 
-async function validate(){
-  for(const row of rows){
-    if(row.status!=='PENDING') continue;
-    if(!row.link.startsWith('http')) continue;
-    try{
-      const r=await fetch(row.link);
-      if(!r.ok){row.status='Error';continue;}
-      const j=await r.json();
-      const hits=j?.hits?.hits || j?.data?.hits?.hits || [];
-      row.status=hits.length>0?'OK':'Warning';
-    }catch{row.status='Error';}
-  }
-}
+      button {
+        flex: 1 1 auto
+      }
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
 
-/* ───────── UI ───────── */
-function setLoading(on){document.getElementById('loading').style.display=on?'block':'none';}
+<body>
+  <div class="container">
+    <header>
+      <img src="crawler.png" alt="Logo">
+      <h1>Category Link Checker</h1>
+    </header>
 
-function render(){
-  const ul=document.getElementById('results');
-  ul.innerHTML='';
-  rows.forEach(({link,parent,status,isNumeric})=>{
-    const li=document.createElement('li');
-    li.dataset.status=status;
-    li.dataset.parent=parent.toLowerCase();
-    li.dataset.numeric=isNumeric?'1':'0';
-    let badgeClass='status-badge';
-    let rowClass='';
-    if(status==='OK'){rowClass='ok';}
-    else if(status==='Warning'){rowClass=isNumeric?'warnnt':'warn';}
-    else if(status==='Error'){rowClass='err';}
+    <label for="urlInput" style="font-weight:600;font-size:14px;">Enter page-v2 URLs (one per line):</label>
+    <textarea id="urlInput" placeholder="https://www.jarir.com/api/v2/sa_en/cmspage/page-v2/123"></textarea>
 
-    if(link.startsWith('http')){
-      li.innerHTML=`
+    <div class="controls">
+      <button onclick="run()">Fetch JSON & Generate Links</button>
+      <button class="secondary" onclick="clearSession()">Clear Session</button>
+      <button class="copy" onclick="copyVisible()">Copy Visible Links</button>
+    </div>
+
+    <div id="loading">Processing… please wait</div>
+
+    <div class="panel">
+      <h3>Generated Links</h3>
+      <div class="filters">
+        <label>
+          Status Filter
+          <select id="statusFilter" onchange="applyFilters()">
+            <option value="all">Show All</option>
+            <option value="OK">OK</option>
+            <option value="Warning">Warning</option>
+            <option value="WarningNT">Warning NT</option>
+          </select>
+        </label>
+        <label>
+          Parent URL Filter
+          <input id="parentFilter" type="text" placeholder="part of parent URL" oninput="applyFilters()">
+        </label>
+      </div>
+
+      <ul id="results"></ul>
+      <p id="empty" class="empty-msg" style="display:none;">No category links found for current filters.</p>
+
+      <div class="legend">
+        <div class="row"><span class="status-badge ok">OK</span> <strong>OK</strong> – Category returns products (hits >
+          0).</div>
+        <div class="row"><span class="status-badge warn">WARN</span> <strong>Warning</strong> – Category returns no
+          products (empty hits).</div>
+        <div class="row"><span class="status-badge warnnt">W‑NT</span> <strong>Warning NT</strong> – *Warning* **with
+          numeric category ID only** (subset of Warning).</div>
+        <div class="row"><span class="status-badge err">ERR</span> <strong>Error</strong> – Fetch / parse problem (shown
+          only under “Show All”).</div>
+      </div>
+    </div>
+
+    <footer>© 2024 Category Link Checker</footer>
+  </div>
+
+  <script>
+    /* ───────── State ───────── */
+    const rows = [];               // {link,parent,status,isNumeric}
+    const processedParents = new Set();
+    const generatedLinks = new Set();
+
+    /* ───────── Runner ───────── */
+    async function run() {
+      setLoading(true);
+      const raw = document.getElementById('urlInput').value.trim();
+      const parents = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      if (!parents.length) { alert('Please enter at least one valid URL.'); setLoading(false); return; }
+
+      const toRun = [];
+      for (const p of parents) {
+        if (!processedParents.has(p)) {
+          processedParents.add(p);
+          toRun.push(p);
+        }
+      }
+
+      if (!toRun.length) {
+        alert('All URLs already processed.');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        if (!window.parent || !window.parent.api) throw new Error("API not found");
+        const res = await window.parent.api('run-tool', {
+          code: 'category',
+          input: { parents: toRun }
+        });
+        if (res.rows) {
+          res.rows.forEach(r => {
+            // In backend we check uniqueness local to that run, but here global
+            if (!generatedLinks.has(r.link)) {
+              generatedLinks.add(r.link);
+              rows.push(r);
+            }
+          });
+        } else if (res.error) alert('Error: ' + res.error);
+      } catch (e) {
+        console.error(e);
+        alert('Error: ' + e.message);
+      }
+
+      setLoading(false);
+      render();
+      applyFilters();
+    }
+
+    /* ───────── Helpers ───────── */
+    function splitBase(u) {
+      const baseUrl1 = u.split('/api')[0] + '/api/';
+      const store = u.split('/')[5].replace('_', '-');
+      return { baseUrl1, store };
+    }
+
+    /* Extract categories (legacy + new style, | separated, unique) */
+    function extractCategories(json) {
+      const items = json?.data?.cms_items?.items || [];
+      const found = [];
+      items.forEach(({ item }) => {
+        const tokens = item.split('||');
+
+        // NEW STYLE: token == 'category'
+        tokens.forEach((tok, i) => {
+          if (tok.trim().toLowerCase() === 'category' && tokens[i + 1]) {
+            tokens[i + 1].split('|').forEach(id => {
+              id = id.trim();
+              if (id) found.push(id);
+            });
+          }
+        });
+
+        // LEGACY segments containing ",category,<ids>"
+        tokens.forEach(seg => {
+          const parts = seg.split(',');
+          const idx = parts.indexOf('category');
+          if (idx !== -1 && parts[idx + 1]) {
+            parts[idx + 1].split('|').forEach(id => {
+              id = id.trim();
+              if (id) found.push(id);
+            });
+          }
+        });
+      });
+      return [...new Set(found)];
+    }
+
+    async function validate() {
+      for (const row of rows) {
+        if (row.status !== 'PENDING') continue;
+        if (!row.link.startsWith('http')) continue;
+        try {
+          const r = await fetch(row.link);
+          if (!r.ok) { row.status = 'Error'; continue; }
+          const j = await r.json();
+          const hits = j?.hits?.hits || j?.data?.hits?.hits || [];
+          row.status = hits.length > 0 ? 'OK' : 'Warning';
+        } catch { row.status = 'Error'; }
+      }
+    }
+
+    /* ───────── UI ───────── */
+    function setLoading(on) { document.getElementById('loading').style.display = on ? 'block' : 'none'; }
+
+    function render() {
+      const ul = document.getElementById('results');
+      ul.innerHTML = '';
+      rows.forEach(({ link, parent, status, isNumeric }) => {
+        const li = document.createElement('li');
+        li.dataset.status = status;
+        li.dataset.parent = parent.toLowerCase();
+        li.dataset.numeric = isNumeric ? '1' : '0';
+        let badgeClass = 'status-badge';
+        let rowClass = '';
+        if (status === 'OK') { rowClass = 'ok'; }
+        else if (status === 'Warning') { rowClass = isNumeric ? 'warnnt' : 'warn'; }
+        else if (status === 'Error') { rowClass = 'err'; }
+
+        if (link.startsWith('http')) {
+          li.innerHTML = `
         <div><a href="${link}" target="_blank">${link}</a>
-          <span class="${badgeClass} ${rowClass==='ok'?'ok':rowClass==='warnnt'?'warnnt':rowClass==='warn'?'warn':rowClass==='err'?'err':''}">
-            ${status==='Warning' && isNumeric?'W-NT':status.toUpperCase()}
+          <span class="${badgeClass} ${rowClass === 'ok' ? 'ok' : rowClass === 'warnnt' ? 'warnnt' : rowClass === 'warn' ? 'warn' : rowClass === 'err' ? 'err' : ''}">
+            ${status === 'Warning' && isNumeric ? 'W-NT' : status.toUpperCase()}
           </span>
         </div>
         <div class="meta-line">Parent: ${parent}</div>`;
-    }else{
-      li.innerHTML=`<div>${link} <span class="${badgeClass} err">ERROR</span></div>`;
+        } else {
+          li.innerHTML = `<div>${link} <span class="${badgeClass} err">ERROR</span></div>`;
+        }
+        li.className = rowClass;
+        ul.appendChild(li);
+      });
     }
-    li.className=rowClass;
-    ul.appendChild(li);
-  });
-}
 
-function applyFilters(){
-  const want=document.getElementById('statusFilter').value;
-  const pterm=document.getElementById('parentFilter').value.trim().toLowerCase();
-  let visible=0;
-  document.querySelectorAll('#results li').forEach(li=>{
-    const status=li.dataset.status;
-    const parent=li.dataset.parent||'';
-    const isNum=li.dataset.numeric==='1';
+    function applyFilters() {
+      const want = document.getElementById('statusFilter').value;
+      const pterm = document.getElementById('parentFilter').value.trim().toLowerCase();
+      let visible = 0;
+      document.querySelectorAll('#results li').forEach(li => {
+        const status = li.dataset.status;
+        const parent = li.dataset.parent || '';
+        const isNum = li.dataset.numeric === '1';
 
-    let show=false;
-    if(want==='all') show=true;
-    else if(want==='OK' && status==='OK') show=true;
-    else if(want==='Warning' && status==='Warning') show=true;
-    else if(want==='WarningNT' && status==='Warning' && isNum) show=true;
+        let show = false;
+        if (want === 'all') show = true;
+        else if (want === 'OK' && status === 'OK') show = true;
+        else if (want === 'Warning' && status === 'Warning') show = true;
+        else if (want === 'WarningNT' && status === 'Warning' && isNum) show = true;
 
-    if(show && pterm && !parent.includes(pterm)) show=false;
+        if (show && pterm && !parent.includes(pterm)) show = false;
 
-    li.style.display=show?'':'none';
-    if(show) visible++;
-  });
-  document.getElementById('empty').style.display=visible?'none':'block';
-}
+        li.style.display = show ? '' : 'none';
+        if (show) visible++;
+      });
+      document.getElementById('empty').style.display = visible ? 'none' : 'block';
+    }
 
-function copyVisible(){
-  const text=[...document.querySelectorAll('#results li')]
-    .filter(li=>li.style.display!=='none')
-    .map(li=>{const a=li.querySelector('a');return a?a.href:'';})
-    .filter(Boolean)
-    .join('\n');
-  if(!text){alert('Nothing to copy.');return;}
-  navigator.clipboard.writeText(text).then(()=>alert('Copied!'));
-}
+    function copyVisible() {
+      const text = [...document.querySelectorAll('#results li')]
+        .filter(li => li.style.display !== 'none')
+        .map(li => { const a = li.querySelector('a'); return a ? a.href : ''; })
+        .filter(Boolean)
+        .join('\n');
+      if (!text) { alert('Nothing to copy.'); return; }
+      navigator.clipboard.writeText(text).then(() => alert('Copied!'));
+    }
 
-function clearSession(){
-  rows.length=0;
-  processedParents.clear();
-  generatedLinks.clear();
-  document.getElementById('urlInput').value='';
-  document.getElementById('results').innerHTML='';
-  document.getElementById('empty').style.display='none';
-  document.getElementById('statusFilter').value='all';
-  document.getElementById('parentFilter').value='';
-  setLoading(false);
-}
+    function clearSession() {
+      rows.length = 0;
+      processedParents.clear();
+      generatedLinks.clear();
+      document.getElementById('urlInput').value = '';
+      document.getElementById('results').innerHTML = '';
+      document.getElementById('empty').style.display = 'none';
+      document.getElementById('statusFilter').value = 'all';
+      document.getElementById('parentFilter').value = '';
+      setLoading(false);
+    }
 
-/* initial blank render */
-render();
-</script>
-<!-- (optional) identify and/or alias primary action -->
-<script> window.QA_TOOL_ID='category'; /* optional */ </script>
-<!-- include the bridge at the end -->
-<script src="qa_bridge.js"></script>
+    /* initial blank render */
+    render();
+  </script>
+  <!-- (optional) identify and/or alias primary action -->
+  <script> window.QA_TOOL_ID = 'category'; /* optional */ </script>
+  <!-- include the bridge at the end -->
+  <script src="qa_bridge.js"></script>
 
 </body>
+
 </html>

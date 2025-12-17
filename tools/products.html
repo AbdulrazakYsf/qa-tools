@@ -1,98 +1,315 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Multi Product / SKU Link Checker</title>
-<style>
- :root{
-   --blue:#007BFF;--bg:#f4f7fa;--card:#fff;--shadow:0 4px 12px rgba(0,0,0,.1);
-   --radius:10px;--warn:#8d4a00;--ok:#096b09;--err:#a10000;
- }
- *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif}
- body{
-   background:var(--bg);color:#222;min-height:100vh;
-   display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
-   padding:18px 10px;
- }
- .container{
-   width:100%;max-width:980px;background:var(--card);
-   border-radius:var(--radius);padding:22px 24px 26px;
-   box-shadow:var(--shadow);
- }
- header{display:flex;align-items:center;justify-content:space-between;
-         border-bottom:2px solid var(--blue);padding-bottom:10px;margin-bottom:20px}
- header img{width:54px;height:54px}
- header h1{font-size:24px;color:var(--blue);margin:0;font-weight:600}
- label.top-lbl{font-weight:600;font-size:14px;display:block}
- textarea{
-   width:100%;height:140px;margin:14px 0 16px;
-   padding:10px 12px;border:1px solid #c7cdd4;border-radius:6px;font-size:15px;
-   resize:vertical;line-height:1.35;
- }
- .actions{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:4px}
- button{
-   background:var(--blue);color:#fff;border:none;
-   padding:10px 16px;border-radius:6px;cursor:pointer;
-   font-size:15px;font-weight:600;letter-spacing:.2px;
-   transition:background .25s,opacity .25s;
- }
- button:hover{background:#0069d6}
- button.secondary{background:#555}
- button.secondary:hover{background:#333}
- button.success{background:#00906d}
- button.success:hover{background:#007256}
- #loading{display:none;color:#ff9800;font-weight:700;margin:4px 0 10px}
- .output{
-   margin-top:4px;padding:18px 18px 16px;background:#f9f9f9;
-   border:1px solid #d9dfe5;border-radius:10px;
- }
- .filters{display:flex;flex-wrap:wrap;gap:16px;margin:0 0 14px 0;align-items:flex-end}
- .filters label{font-size:13px;font-weight:600;display:flex;flex-direction:column;gap:6px;min-width:170px}
- select,input{
-   padding:7px 9px;font-size:14px;border:1px solid #bbc2c9;border-radius:6px;
-   font-family:inherit;background:#fff;
- }
- ul{list-style:none;padding-left:0;margin:0}
- li{
-   padding:11px 0 12px;border-bottom:1px solid #e3e7eb;line-height:1.38;
-   font-size:14.5px;
- }
- li:last-child{border-bottom:none}
- a{word-break:break-all;text-decoration:none;color:#0645ad}
- a:hover{text-decoration:underline}
- .status-chip{
-   display:inline-block;font-size:11px;font-weight:600;
-   padding:2px 8px;margin-left:8px;border-radius:12px;vertical-align:middle;
-   background:#e0e0e0;color:#333;text-transform:uppercase;letter-spacing:.5px;
- }
- .ok .status-chip{background:#d5f7d5;color:var(--ok)}
- .warning .status-chip{background:#ffe3c4;color:var(--warn)}
- .warningplus .status-chip{background:#ffefd0;color:#6d5400}
- .error .status-chip{background:#ffd4d4;color:var(--err)}
- .meta{
-   font-size:12.5px;color:#555;margin-top:4px;line-height:1.4;
-   display:flex;flex-wrap:wrap;gap:14px;
- }
- #empty{display:none;color:#d00;font-weight:600;margin-top:6px}
- footer{margin-top:30px;font-size:13px;color:#888;text-align:center}
- .legend{margin-top:16px;font-size:12.5px;line-height:1.5;color:#555}
- .legend-row{display:flex;align-items:center;gap:6px;margin:3px 0}
- .legend-row span.badge{
-   display:inline-block;font-size:11px;font-weight:600;padding:2px 7px;border-radius:12px;
- }
- .badge.ok{background:#d5f7d5;color:var(--ok)}
- .badge.warn{background:#ffe3c4;color:var(--warn)}
- .badge.warnplus{background:#ffefd0;color:#6d5400}
- .badge.err{background:#ffd4d4;color:var(--err)}
- @media(max-width:720px){
-   header h1{font-size:20px}
-   .filters label{min-width:140px}
-   .meta{flex-direction:column;align-items:flex-start}
- }
-</style>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Multi Product / SKU Link Checker</title>
+  <style>
+    :root {
+      --blue: #007BFF;
+      --bg: #f4f7fa;
+      --card: #fff;
+      --shadow: 0 4px 12px rgba(0, 0, 0, .1);
+      --radius: 10px;
+      --warn: #8d4a00;
+      --ok: #096b09;
+      --err: #a10000;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif
+    }
+
+    body {
+      background: var(--bg);
+      color: #222;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 18px 10px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 980px;
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 22px 24px 26px;
+      box-shadow: var(--shadow);
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid var(--blue);
+      padding-bottom: 10px;
+      margin-bottom: 20px
+    }
+
+    header img {
+      width: 54px;
+      height: 54px
+    }
+
+    header h1 {
+      font-size: 24px;
+      color: var(--blue);
+      margin: 0;
+      font-weight: 600
+    }
+
+    label.top-lbl {
+      font-weight: 600;
+      font-size: 14px;
+      display: block
+    }
+
+    textarea {
+      width: 100%;
+      height: 140px;
+      margin: 14px 0 16px;
+      padding: 10px 12px;
+      border: 1px solid #c7cdd4;
+      border-radius: 6px;
+      font-size: 15px;
+      resize: vertical;
+      line-height: 1.35;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 4px
+    }
+
+    button {
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: .2px;
+      transition: background .25s, opacity .25s;
+    }
+
+    button:hover {
+      background: #0069d6
+    }
+
+    button.secondary {
+      background: #555
+    }
+
+    button.secondary:hover {
+      background: #333
+    }
+
+    button.success {
+      background: #00906d
+    }
+
+    button.success:hover {
+      background: #007256
+    }
+
+    #loading {
+      display: none;
+      color: #ff9800;
+      font-weight: 700;
+      margin: 4px 0 10px
+    }
+
+    .output {
+      margin-top: 4px;
+      padding: 18px 18px 16px;
+      background: #f9f9f9;
+      border: 1px solid #d9dfe5;
+      border-radius: 10px;
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin: 0 0 14px 0;
+      align-items: flex-end
+    }
+
+    .filters label {
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 170px
+    }
+
+    select,
+    input {
+      padding: 7px 9px;
+      font-size: 14px;
+      border: 1px solid #bbc2c9;
+      border-radius: 6px;
+      font-family: inherit;
+      background: #fff;
+    }
+
+    ul {
+      list-style: none;
+      padding-left: 0;
+      margin: 0
+    }
+
+    li {
+      padding: 11px 0 12px;
+      border-bottom: 1px solid #e3e7eb;
+      line-height: 1.38;
+      font-size: 14.5px;
+    }
+
+    li:last-child {
+      border-bottom: none
+    }
+
+    a {
+      word-break: break-all;
+      text-decoration: none;
+      color: #0645ad
+    }
+
+    a:hover {
+      text-decoration: underline
+    }
+
+    .status-chip {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      margin-left: 8px;
+      border-radius: 12px;
+      vertical-align: middle;
+      background: #e0e0e0;
+      color: #333;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+
+    .ok .status-chip {
+      background: #d5f7d5;
+      color: var(--ok)
+    }
+
+    .warning .status-chip {
+      background: #ffe3c4;
+      color: var(--warn)
+    }
+
+    .warningplus .status-chip {
+      background: #ffefd0;
+      color: #6d5400
+    }
+
+    .error .status-chip {
+      background: #ffd4d4;
+      color: var(--err)
+    }
+
+    .meta {
+      font-size: 12.5px;
+      color: #555;
+      margin-top: 4px;
+      line-height: 1.4;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+
+    #empty {
+      display: none;
+      color: #d00;
+      font-weight: 600;
+      margin-top: 6px
+    }
+
+    footer {
+      margin-top: 30px;
+      font-size: 13px;
+      color: #888;
+      text-align: center
+    }
+
+    .legend {
+      margin-top: 16px;
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: #555
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 3px 0
+    }
+
+    .legend-row span.badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 12px;
+    }
+
+    .badge.ok {
+      background: #d5f7d5;
+      color: var(--ok)
+    }
+
+    .badge.warn {
+      background: #ffe3c4;
+      color: var(--warn)
+    }
+
+    .badge.warnplus {
+      background: #ffefd0;
+      color: #6d5400
+    }
+
+    .badge.err {
+      background: #ffd4d4;
+      color: var(--err)
+    }
+
+    @media(max-width:720px) {
+      header h1 {
+        font-size: 20px
+      }
+
+      .filters label {
+        min-width: 140px
+      }
+
+      .meta {
+        flex-direction: column;
+        align-items: flex-start
+      }
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
+
 <body>
   <div class="container">
     <header>
@@ -131,9 +348,12 @@ https://www.jarir.com/api/v2/sa_en/cmspage/page-v2/235"></textarea>
       <p id="empty">No products found for current filters.</p>
 
       <div class="legend">
-        <div class="legend-row"><span class="badge ok">OK</span> All unique SKUs returned (hits = unique SKUs &gt; 0).</div>
-        <div class="legend-row"><span class="badge warn">Warning</span> Partial match: some (not all) unique SKUs returned OR extra hits.</div>
-        <div class="legend-row"><span class="badge warnplus">Warning Plus</span> No matching SKUs returned (also shown under “Warning”).</div>
+        <div class="legend-row"><span class="badge ok">OK</span> All unique SKUs returned (hits = unique SKUs &gt; 0).
+        </div>
+        <div class="legend-row"><span class="badge warn">Warning</span> Partial match: some (not all) unique SKUs
+          returned OR extra hits.</div>
+        <div class="legend-row"><span class="badge warnplus">Warning Plus</span> No matching SKUs returned (also shown
+          under “Warning”).</div>
         <div class="legend-row"><span class="badge err">Error</span> Request / parse problem.</div>
       </div>
     </div>
@@ -141,147 +361,156 @@ https://www.jarir.com/api/v2/sa_en/cmspage/page-v2/235"></textarea>
 
   <footer>© 2024 Product Link Checker</footer>
 
-<script>
-/* ───── Cookie Helpers (future-proof; currently only used for clearSession completeness) ───── */
-function setCookie(n,v,d){const e=new Date(Date.now()+d*864e5).toUTCString();document.cookie=`${n}=${encodeURIComponent(v)};expires=${e};path=/`;}
-function getCookie(n){return document.cookie.split('; ').reduce((r,v)=>{const p=v.split('=');return p[0]===n?decodeURIComponent(p[1]):r},'');}
-function deleteCookie(n){setCookie(n,'',-1);}
+  <script>
+    /* ───── Cookie Helpers (future-proof; currently only used for clearSession completeness) ───── */
+    function setCookie(n, v, d) { const e = new Date(Date.now() + d * 864e5).toUTCString(); document.cookie = `${n}=${encodeURIComponent(v)};expires=${e};path=/`; }
+    function getCookie(n) { return document.cookie.split('; ').reduce((r, v) => { const p = v.split('='); return p[0] === n ? decodeURIComponent(p[1]) : r }, ''); }
+    function deleteCookie(n) { setCookie(n, '', -1); }
 
-/* ───── State ───── */
-let rows=[];                 // {link,parent,totalCount,uniqueCount,hitsCount,status}
-let visitedParents=new Set();
-let visitedLinks=new Set();  // Avoid duplicate link generation across same session.
-const CACHE_COOKIE='multiSkuRows'; // not auto-saved; reserved for future.
+    /* ───── State ───── */
+    let rows = [];                 // {link,parent,totalCount,uniqueCount,hitsCount,status}
+    let visitedParents = new Set();
+    let visitedLinks = new Set();  // Avoid duplicate link generation across same session.
+    const CACHE_COOKIE = 'multiSkuRows'; // not auto-saved; reserved for future.
 
-function toggleLoading(on){document.getElementById('loading').style.display=on?'block':'none';}
+    function toggleLoading(on) { document.getElementById('loading').style.display = on ? 'block' : 'none'; }
 
-/* ───── Core Run ───── */
-async function run(){
-  // We KEEP previous results if user runs again to append? Requirement: re-run fresh each fetch.
-  // For consistent “session” model we clear runtime each run (except textarea).
-  clearRuntime(); 
-  toggleLoading(true);
+    /* ───── Core Run ───── */
+    async function run() {
+      clearRuntime();
+      toggleLoading(true);
 
-  const seeds=document.getElementById('urls').value
-    .trim().split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      const seeds = document.getElementById('urls').value
+        .trim().split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 
-  if(!seeds.length){
-    alert('Please enter at least one valid URL.');
-    toggleLoading(false);
-    return;
-  }
+      if (!seeds.length) {
+        alert('Please enter at least one valid URL.');
+        toggleLoading(false);
+        return;
+      }
 
-  for(const parent of seeds){
-    if(visitedParents.has(parent)) continue;
-    visitedParents.add(parent);
-    await processParent(parent);
-  }
+      try {
+        if (!window.parent || !window.parent.api) throw new Error("API not found");
 
-  await validateRows();
-  toggleLoading(false);
-  render();
-  applyFilters();
-}
+        const res = await window.parent.api('run-tool', {
+          code: 'products',
+          input: { parents: seeds }
+        });
 
-/* ───── Parent Processing ───── */
-async function processParent(parent){
-  try{
-    const res=await fetch(parent);
-    if(!res.ok) throw new Error('Network error');
-    const json=await res.json();
-    const {base,store}=deriveBase(parent);
-    const items=parseCMS(json); // [{type:'single'|'multi', list:[...] }]
+        if (res.rows) {
+          rows = res.rows;
+        } else if (res.error) {
+          alert('Error: ' + res.error);
+        }
+      } catch (e) {
+        console.error(e);
+        alert('Error: ' + e.message);
+      }
 
-    items.forEach(({type,list})=>{
-      if(!list.length) return;
-      const totalCount=list.length;
-      const uniqueList=[...new Set(list)];
-      const uniqueCount=uniqueList.length;
-      const skuSegment=list.join(','); // keep duplicates for request
-      const link= type==='multi'
-          ? `${base}catalogv2/product/store/${store}/sku/${skuSegment}`
-          : `${base}catalogv1/product/store/${store}/sku/${list[0]}`;
+      toggleLoading(false);
+      render();
+      applyFilters();
+    }
 
-      if(visitedLinks.has(link)) return;
-      visitedLinks.add(link);
+    /* ───── Parent Processing ───── */
+    async function processParent(parent) {
+      try {
+        const res = await fetch(parent);
+        if (!res.ok) throw new Error('Network error');
+        const json = await res.json();
+        const { base, store } = deriveBase(parent);
+        const items = parseCMS(json); // [{type:'single'|'multi', list:[...] }]
 
-      rows.push({
-        link,parent,totalCount,uniqueCount,hitsCount:0,status:''
+        items.forEach(({ type, list }) => {
+          if (!list.length) return;
+          const totalCount = list.length;
+          const uniqueList = [...new Set(list)];
+          const uniqueCount = uniqueList.length;
+          const skuSegment = list.join(','); // keep duplicates for request
+          const link = type === 'multi'
+            ? `${base}catalogv2/product/store/${store}/sku/${skuSegment}`
+            : `${base}catalogv1/product/store/${store}/sku/${list[0]}`;
+
+          if (visitedLinks.has(link)) return;
+          visitedLinks.add(link);
+
+          rows.push({
+            link, parent, totalCount, uniqueCount, hitsCount: 0, status: ''
+          });
+        });
+
+      } catch (err) {
+        console.error('Parent fetch failed:', parent, err);
+      }
+    }
+
+    /* ───── Helpers ───── */
+    function deriveBase(url) {
+      const base = url.split('/api')[0] + '/api/';
+      const store = url.split('/')[5].replace('_', '-');
+      return { base, store };
+    }
+
+    function parseCMS(json) {
+      const cmsItems = json?.data?.cms_items?.items || [];
+      const result = [];
+      cmsItems.forEach(({ item }) => {
+        const tokens = item.split('||');
+        for (let i = 0; i < tokens.length; i++) {
+          if (tokens[i] === 'product' && tokens[i + 1]) {
+            result.push({ type: 'single', list: [tokens[i + 1]] });
+            i++;
+          } else if (tokens[i] === 'products' && tokens[i + 1]) {
+            const arr = tokens[i + 1].split(',').map(s => s.trim()).filter(Boolean);
+            if (arr.length) result.push({ type: 'multi', list: arr });
+            i++;
+          }
+        }
       });
-    });
+      return result;
+    }
 
-  }catch(err){
-    console.error('Parent fetch failed:', parent, err);
-  }
-}
+    /* ───── Validation ───── */
+    async function validateRows() {
+      for (const r of rows) {
+        try {
+          const resp = await fetch(r.link);
+          if (!resp.ok) { r.status = 'Error'; continue; }
+          const j = await resp.json();
+          const hits = j?.hits?.hits || j?.data?.hits?.hits || [];
+          r.hitsCount = hits.length;
 
-/* ───── Helpers ───── */
-function deriveBase(url){
-  const base=url.split('/api')[0]+'/api/';
-  const store=url.split('/')[5].replace('_','-');
-  return {base,store};
-}
-
-function parseCMS(json){
-  const cmsItems=json?.data?.cms_items?.items||[];
-  const result=[];
-  cmsItems.forEach(({item})=>{
-    const tokens=item.split('||');
-    for(let i=0;i<tokens.length;i++){
-      if(tokens[i]==='product' && tokens[i+1]){
-        result.push({type:'single',list:[tokens[i+1]]});
-        i++;
-      }else if(tokens[i]==='products' && tokens[i+1]){
-        const arr=tokens[i+1].split(',').map(s=>s.trim()).filter(Boolean);
-        if(arr.length) result.push({type:'multi',list:arr});
-        i++;
+          if (r.hitsCount === 0) {
+            r.status = 'Warning Plus';
+          } else if (r.hitsCount === r.uniqueCount) {
+            r.status = 'OK';
+          } else if (r.hitsCount < r.uniqueCount) {
+            r.status = 'Warning';           // partial
+          } else {
+            r.status = 'Warning';           // more hits than requested unique SKUs (still a warning)
+          }
+        } catch (e) {
+          r.status = 'Error';
+        }
       }
     }
-  });
-  return result;
-}
 
-/* ───── Validation ───── */
-async function validateRows(){
-  for(const r of rows){
-    try{
-      const resp=await fetch(r.link);
-      if(!resp.ok){r.status='Error';continue;}
-      const j=await resp.json();
-      const hits=j?.hits?.hits || j?.data?.hits?.hits || [];
-      r.hitsCount=hits.length;
+    /* ───── Rendering & Filtering ───── */
+    function render() {
+      const ul = document.getElementById('list');
+      ul.innerHTML = '';
+      rows.forEach(r => {
+        const li = document.createElement('li');
+        li.dataset.status = r.status;
+        li.dataset.parent = r.parent.toLowerCase();
 
-      if(r.hitsCount===0){
-        r.status='Warning Plus';
-      }else if(r.hitsCount===r.uniqueCount){
-        r.status='OK';
-      }else if(r.hitsCount<r.uniqueCount){
-        r.status='Warning';           // partial
-      }else{
-        r.status='Warning';           // more hits than requested unique SKUs (still a warning)
-      }
-    }catch(e){
-      r.status='Error';
-    }
-  }
-}
+        let cls = 'error';
+        if (r.status === 'OK') cls = 'ok';
+        else if (r.status === 'Warning') cls = 'warning';
+        else if (r.status === 'Warning Plus') cls = 'warningplus';
 
-/* ───── Rendering & Filtering ───── */
-function render(){
-  const ul=document.getElementById('list');
-  ul.innerHTML='';
-  rows.forEach(r=>{
-    const li=document.createElement('li');
-    li.dataset.status=r.status;
-    li.dataset.parent=r.parent.toLowerCase();
-
-    let cls='error';
-    if(r.status==='OK') cls='ok';
-    else if(r.status==='Warning') cls='warning';
-    else if(r.status==='Warning Plus') cls='warningplus';
-
-    li.className=cls;
-    li.innerHTML=`
+        li.className = cls;
+        li.innerHTML = `
       <a href="${r.link}" target="_blank">${r.link}</a>
       <span class="status-chip">${r.status}</span>
       <div class="meta">
@@ -290,62 +519,63 @@ function render(){
         <span>Unique SKUs: ${r.uniqueCount}</span>
         <span>Hits: ${r.hitsCount}</span>
       </div>`;
-    ul.appendChild(li);
-  });
-  document.getElementById('empty').style.display=rows.length?'none':'block';
-}
+        ul.appendChild(li);
+      });
+      document.getElementById('empty').style.display = rows.length ? 'none' : 'block';
+    }
 
-function applyFilters(){
-  const statusWant=document.getElementById('statusFilter').value;
-  const parentTerm=document.getElementById('parentFilter').value.toLowerCase();
-  let visible=0;
-  document.querySelectorAll('#list li').forEach(li=>{
-    const st=li.dataset.status;
-    const parent=li.dataset.parent;
-    let matchStatus =
-       statusWant==='all' ||
-       st===statusWant ||
-       (statusWant==='Warning' && (st==='Warning' || st==='Warning Plus')); // include Warning Plus
-    if(statusWant==='Error') matchStatus = st==='Error';
+    function applyFilters() {
+      const statusWant = document.getElementById('statusFilter').value;
+      const parentTerm = document.getElementById('parentFilter').value.toLowerCase();
+      let visible = 0;
+      document.querySelectorAll('#list li').forEach(li => {
+        const st = li.dataset.status;
+        const parent = li.dataset.parent;
+        let matchStatus =
+          statusWant === 'all' ||
+          st === statusWant ||
+          (statusWant === 'Warning' && (st === 'Warning' || st === 'Warning Plus')); // include Warning Plus
+        if (statusWant === 'Error') matchStatus = st === 'Error';
 
-    const matchParent = !parentTerm || parent.includes(parentTerm);
-    const show=matchStatus && matchParent;
-    li.style.display=show?'':'none';
-    if(show) visible++;
-  });
-  document.getElementById('empty').style.display=visible?'none':'block';
-}
+        const matchParent = !parentTerm || parent.includes(parentTerm);
+        const show = matchStatus && matchParent;
+        li.style.display = show ? '' : 'none';
+        if (show) visible++;
+      });
+      document.getElementById('empty').style.display = visible ? 'none' : 'block';
+    }
 
-function copyVisible(){
-  const links=[...document.querySelectorAll('#list li')]
-    .filter(li=>li.style.display!=='none')
-    .map(li=>li.querySelector('a').href);
-  if(!links.length){alert('Nothing to copy.');return;}
-  navigator.clipboard.writeText(links.join('\n')).then(()=>alert('Copied!'));
-}
+    function copyVisible() {
+      const links = [...document.querySelectorAll('#list li')]
+        .filter(li => li.style.display !== 'none')
+        .map(li => li.querySelector('a').href);
+      if (!links.length) { alert('Nothing to copy.'); return; }
+      navigator.clipboard.writeText(links.join('\n')).then(() => alert('Copied!'));
+    }
 
-/* ───── Session Clearing ───── */
-function clearRuntime(){
-  rows=[];
-  visitedParents.clear();
-  visitedLinks.clear();
-  document.getElementById('list').innerHTML='';
-  document.getElementById('empty').style.display='none';
-  document.getElementById('statusFilter').value='all';
-  document.getElementById('parentFilter').value='';
-}
+    /* ───── Session Clearing ───── */
+    function clearRuntime() {
+      rows = [];
+      visitedParents.clear();
+      visitedLinks.clear();
+      document.getElementById('list').innerHTML = '';
+      document.getElementById('empty').style.display = 'none';
+      document.getElementById('statusFilter').value = 'all';
+      document.getElementById('parentFilter').value = '';
+    }
 
-function clearSession(){
-  deleteCookie(CACHE_COOKIE);   // placeholder if persistence is later added
-  clearRuntime();
-  document.getElementById('urls').value='';
-  toggleLoading(false);
-}
-</script>
-<!-- (optional) identify and/or alias primary action -->
-<script> window.QA_TOOL_ID='products'; /* optional */ </script>
-<!-- include the bridge at the end -->
-<script src="qa_bridge.js"></script>
+    function clearSession() {
+      deleteCookie(CACHE_COOKIE);   // placeholder if persistence is later added
+      clearRuntime();
+      document.getElementById('urls').value = '';
+      toggleLoading(false);
+    }
+  </script>
+  <!-- (optional) identify and/or alias primary action -->
+  <script> window.QA_TOOL_ID = 'products'; /* optional */ </script>
+  <!-- include the bridge at the end -->
+  <script src="qa_bridge.js"></script>
 
 </body>
+
 </html>
