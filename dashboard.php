@@ -259,18 +259,73 @@ if (isset($_GET['api'])) {
         echo json_encode(['ok' => true]);
         break;
 
+      case 'assign-global-config':
+        require_role(['admin']);
+        $configId = $input['config_id'] ?? null;
+        if (!$configId) {
+          echo json_encode(['error' => 'Missing config ID']);
+          break;
+        }
+
+        // Verify config exists
+        $stmt = $db->prepare("SELECT id, user_id FROM qa_tool_configs WHERE id=?");
+        $stmt->execute([$configId]);
+        $cfg = $stmt->fetch();
+        if (!$cfg) {
+          echo json_encode(['error' => 'Config not found']);
+          break;
+        }
+
+        // If it's a User config (user_id != NULL), we probably shouldn't mess with it unless we want to "take over"
+        // But the requirement says "Global Configuration". Global implies user_id IS NULL.
+        // Let's assume Global means user_id IS NULL.
+        // Or if the admin wants to load *any* config. The prompt says "Load Configuration... for their test runs".
+        // Use admin_user_id to store this temporary "selection".
+
+        // Logic: Set admin_user_id = current admin ID for this config.
+        // AND potentially clear admin_user_id from other configs of the SAME tool?
+        // Let's assume multi-config loading is allowed per tool.
+        // Actually, user says "load global configuration for their test runs".
+        // Usually, you run one config per tool.
+        // Let's just set the link.
+
+        $adminId = current_user()['id'];
+
+        // Optional: Clear previous selection for this tool? 
+        // We don't have tool_code here easily without another query, but let's just update this one.
+        $stmt = $db->prepare("UPDATE qa_tool_configs SET admin_user_id=? WHERE id=?");
+        $stmt->execute([$adminId, $configId]);
+        echo json_encode(['ok' => true]);
+        break;
+
       /* Support System */
       case 'save-support':
         $uid = current_user()['id'];
         $sub = $input['subject'] ?? 'No Subject';
         $msg = $input['message'] ?? '';
+        $prio = $input['priority'] ?? 'low';
         if (!$msg) {
           echo json_encode(['error' => 'Message empty']);
           break;
         }
 
-        $stmt = $db->prepare("INSERT INTO qa_support_messages (user_id, subject, message) VALUES (?, ?, ?)");
-        $stmt->execute([$uid, $sub, $msg]);
+        $stmt = $db->prepare("INSERT INTO qa_support_messages (user_id, subject, message, priority) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$uid, $sub, $msg, $prio]);
+        echo json_encode(['ok' => true]);
+        break;
+
+      case 'update-support-priority':
+        require_role(['admin']);
+        $id = $input['id'] ?? null;
+        $prio = $input['priority'] ?? 'low';
+
+        if (!$id) {
+          echo json_encode(['error' => 'Missing ID']);
+          break;
+        }
+
+        $stmt = $db->prepare("UPDATE qa_support_messages SET priority=? WHERE id=?");
+        $stmt->execute([$prio, $id]);
         echo json_encode(['ok' => true]);
         break;
 
@@ -573,44 +628,23 @@ if (isset($_GET['api'])) {
         $toolStats = $bQuery->fetchAll(PDO::FETCH_ASSOC);
 
         // 4. STATS EXPANSION: Total Configs & Tickets
-        // Configs: Count all enabled (or just all?) - let's count all.
-        // If user is admin/viewer, show all. If tester, maybe show only theirs? 
-        // For simplicity and "Total", we show valid configs in system or accessible ones.
-        // Let's stick to "All Configs" for now as it's a dashboard stat.
-        $sqlCfg = "SELECT COUNT(*) as c FROM qa_tool_configs";
-        // If we want to filter by user: 
-        // if ($targetUid) { $sqlCfg .= " WHERE user_id = ?"; ... }
-        // The user request was just "Total Configurations", implying system-wide.
-        // But to be consistent with other stats, maybe we should respect the user context if possible?
-        // Existing stats (runs) are filtered by user.
-        // Let's do System Total for Configs as they are often shared.
-        $stmtCfg = $db->query($sqlCfg);
+        // Use $targetUid to filter if set (works for both User Filter select and Tester role restriction)
+        $pMeta = [];
+        $whereMeta = "";
+        if ($targetUid) {
+          $whereMeta = "WHERE user_id = ?";
+          $pMeta[] = $targetUid;
+        }
+
+        // Configs
+        $stmtCfg = $db->prepare("SELECT COUNT(*) as c FROM qa_tool_configs $whereMeta");
+        $stmtCfg->execute($pMeta);
         $totalConfigs = $stmtCfg->fetch()['c'];
 
-        // Tickets:
-        // Admin sees all. User sees theirs.
-        $sqlTix = "SELECT COUNT(*) as c FROM qa_support_messages";
-        $pTix = [];
-        // user['role'] is checkable via $user session or helper
-        // But here we are in API. We have $targetUid if it was set for filtering runs.
-        // However, standard stats logic:
-        // If Admin: Show Total Tickets in system.
-        // If Tester: Show Total My Tickets.
-        // We can reuse the $targetUid logic if it aligns, OR check the session user role.
-        // best is to check session role.
-        $currentUserRole = $currentUser['role'] ?? 'viewer';
-        if ($currentUserRole !== 'admin') {
-          $sqlTix .= " WHERE user_id = ?";
-          $pTix[] = $user['id']; // $user is populated from required_login/current_user at top of endpoint?
-          // specific 'stats' endpoint doesn't call current_user() explicitly at top but 'list-runs' does.
-          // We need to ensure we have the user.
-          // Looking at code: $user = current_user(); is called in 'stats' block?
-          // Let's check lines 480-500.
-          // It calls: $user = current_user(); 
-        }
-        $qTix = $db->prepare($sqlTix);
-        $qTix->execute($pTix);
-        $totalTickets = $qTix->fetch()['c'];
+        // Tickets
+        $stmtTix = $db->prepare("SELECT COUNT(*) as c FROM qa_support_messages $whereMeta");
+        $stmtTix->execute($pMeta);
+        $totalTickets = $stmtTix->fetch()['c'];
 
         echo json_encode([
           'total_runs' => $total,
@@ -8520,11 +8554,34 @@ $TOOL_DEFS = [
       let totalTests = 0, totalPassed = 0, totalFailed = 0, totalOpen = 0;
       const allDetails = [];
 
+      // Get current user for config prioritization (Admin loaded vs Personal vs Global)
+      const curUserInfo = await api('get-profile');
+      const curUserId = curUserInfo.id;
+      const isAdminRun = (curUserInfo.role === 'admin');
+
       for (const code of selectedCodes) {
         logToConsole(`Preparing ${code}...`, 'info');
 
-        // Check Config
-        const cfg = CONFIGS.find(c => c.tool_code === code && c.is_enabled == 1);
+        // Find best config
+        // Filter enabled configs for this tool
+        const toolConfigs = CONFIGS.filter(c => c.tool_code === code && c.is_enabled == 1);
+
+        let cfg = null;
+        if (isAdminRun) {
+          // 1. Admin Loaded
+          cfg = toolConfigs.find(c => c.admin_user_id == curUserId);
+          // 2. Personal (if any)
+          if (!cfg) cfg = toolConfigs.find(c => c.user_id == curUserId);
+          // 3. Global
+          if (!cfg) cfg = toolConfigs.find(c => !c.user_id);
+          // 4. Any (Fallback)
+          if (!cfg) cfg = toolConfigs[0];
+        } else {
+          // Tester: Own first (guaranteed by list-configs order usually, but let's be explicit)
+          cfg = toolConfigs.find(c => c.user_id == curUserId);
+          if (!cfg) cfg = toolConfigs.find(c => !c.user_id); // Global
+          if (!cfg) cfg = toolConfigs[0];
+        }
 
         // Validate Input existence
         let inputsValid = false;
@@ -8978,13 +9035,34 @@ $TOOL_DEFS = [
         // Admin: All
         // Tester: Only if Own
         let actions = '';
+        // Load Button Logic (Admin Only)
+        // Visible only if filter is NOT 'All Users' (empty)
+        // And accessible for Global (user_id=null) or User configs (if desired)
+        // Request: "visible for Global and specific Users selections, hidden for All Users"
+        let loadBtn = '';
+        if (isAdmin && filterVal !== '') {
+          // Check if already loaded? (admin_user_id == curUid)
+          // We don't have admin_user_id in the JS object yet, need to ensuring list-configs returns it.
+          // Backend `SELECT c.*` returns it.
+          const isLoaded = (cfg.admin_user_id == curUid);
+          const btnText = isLoaded ? 'Loaded' : 'Load';
+          const btnClass = isLoaded ? 'btn-success' : 'btn-secondary'; // Helper classes needed or inline style
+          const style = isLoaded ? 'background:#28a745;color:white' : 'background:#6c757d;color:white';
+
+          loadBtn = `<button data-action="load-config" style="${style}">${btnText}</button>`;
+        }
+
         if (isAdmin || cfg.user_id == curUid) {
           actions = `
+             ${loadBtn}
              <button data-action="edit">Edit</button>
              <button data-action="delete" class="text-danger">Delete</button>
            `;
         } else {
-          actions = `<span class="text-muted" style="font-size:11px;">Read-only</span>`;
+          actions = `
+            ${loadBtn}
+            <span class="text-muted" style="font-size:11px;">Read-only</span>
+          `;
         }
 
         const tr = document.createElement('tr');
@@ -9030,6 +9108,11 @@ $TOOL_DEFS = [
       } else if (btn.dataset.action === 'delete') {
         if (!confirm('Delete configuration "' + cfg.config_name + '"?')) return;
         await api('delete-config', { id: cfg.id });
+        await loadConfigs();
+      }
+      else if (btn.dataset.action === 'load-config') {
+        await api('assign-global-config', { config_id: cfg.id });
+        // Refresh to show status
         await loadConfigs();
       }
     });
@@ -9352,11 +9435,8 @@ $TOOL_DEFS = [
           if (t.admin_reply) t.status = 'closed';
           else t.status = 'open';
         }
-        // Random mock for priority visual
-        if (!t.priority) {
-          const priorities = ['high', 'medium', 'low', 'urgent'];
-          t.priority = priorities[t.id % 4];
-        }
+        // Priority now comes from DB (default 'low' if null)
+        if (!t.priority) t.priority = 'low';
         return t;
       });
 
@@ -9444,8 +9524,21 @@ $TOOL_DEFS = [
       document.getElementById('chat-ticket-subject').innerText = t.subject;
       document.getElementById('chat-ticket-id').innerText = `Ticket #${t.id} • ${t.user_name || 'User'}`;
       const statusBadge = document.getElementById('chat-ticket-status');
-      statusBadge.className = `t-badge badge-${t.priority || 'low'}`;
-      statusBadge.innerText = (t.priority || 'Normal').toUpperCase();
+      if (SUPP_ROLE === 'admin') {
+        const p = t.priority || 'low';
+        statusBadge.className = '';
+        statusBadge.innerHTML = `
+            <select onchange="updateTicketPriority(${t.id}, this.value)" style="font-size:11px; padding:2px; border-radius:4px; border:1px solid #ccc;">
+                <option value="low" ${p === 'low' ? 'selected' : ''}>LOW</option>
+                <option value="medium" ${p === 'medium' ? 'selected' : ''}>MEDIUM</option>
+                <option value="high" ${p === 'high' ? 'selected' : ''}>HIGH</option>
+                <option value="urgent" ${p === 'urgent' ? 'selected' : ''}>URGENT</option>
+            </select>
+          `;
+      } else {
+        statusBadge.className = `t-badge badge-${t.priority || 'low'}`;
+        statusBadge.innerText = (t.priority || 'Normal').toUpperCase();
+      }
 
       // Render Messages
       const chatArea = document.getElementById('chat-messages-area');
@@ -9540,6 +9633,18 @@ $TOOL_DEFS = [
       const input = document.getElementById('chat-reply-input');
       input.value = text;
       input.focus();
+    }
+
+    function updateTicketPriority(id, prio) {
+      if (!confirm('Change priority to ' + prio + '?')) return;
+      api('update-support-priority', { id: id, priority: prio }).then(res => {
+        if (res.ok) {
+           // Update cache
+           const t = TICKETS_CACHE.find(x => x.id == id);
+           if(t) t.priority = prio;
+           loadSupportData(); // Refresh list to update colors
+        }
+      });
     }
 
     function openNewTicketModal() {

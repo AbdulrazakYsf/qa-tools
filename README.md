@@ -158,6 +158,7 @@ Internal use only - Jarir.com QA Team
 
 ## Version History
 
+- **v2.1.0** - Stable Release: Admin Config Loading, Custom Support Priorities, Enhanced Dashboard Stats.
 - **v2.0.0** - Fixed Run All Tests, modular architecture, improved reporting
-- **v1.1.0** - Added Tool vs Pass/Fail Clustered Bar Charts, Pass Rate & Utilized Tool Metrics, and Enhanced Reporting.
-- **v1.0.0** - Stable Release: Support Section Overhaul (Threading, UI Polish, Notifications), 13 Tools.
+- **v1.1.0** - Added Tool vs Pass/Fail Clustered Bar Charts, Pass Rate & Utilized Tool Metrics.
+- **v1.0.0** - Initial Release.

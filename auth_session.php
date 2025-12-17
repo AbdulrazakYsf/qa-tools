@@ -76,6 +76,14 @@ function get_db_auth()
     }
 
     try {
+        $cols = $pdo->query("SHOW COLUMNS FROM qa_support_messages LIKE 'priority'")->fetchAll();
+        if (count($cols) == 0) {
+            $pdo->exec("ALTER TABLE qa_support_messages ADD COLUMN priority VARCHAR(20) DEFAULT 'low' AFTER is_read");
+        }
+    } catch (Exception $e) {
+    }
+
+    try {
         $cols = $pdo->query("SHOW COLUMNS FROM qa_test_runs LIKE 'user_id'")->fetchAll();
         if (count($cols) == 0) {
             $pdo->exec("ALTER TABLE qa_test_runs ADD COLUMN user_id INT UNSIGNED DEFAULT NULL AFTER id");
@@ -102,6 +110,15 @@ function get_db_auth()
             $pdo->exec("ALTER TABLE qa_tool_configs ADD COLUMN user_id INT UNSIGNED DEFAULT NULL AFTER id");
             $pdo->exec("CREATE INDEX idx_config_user ON qa_tool_configs(user_id)");
             $pdo->exec("CREATE INDEX idx_config_tool ON qa_tool_configs(tool_code)");
+        }
+    } catch (Exception $e) {
+    }
+
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM qa_tool_configs LIKE 'admin_user_id'")->fetchAll();
+        if (count($cols) == 0) {
+            $pdo->exec("ALTER TABLE qa_tool_configs ADD COLUMN admin_user_id INT UNSIGNED DEFAULT NULL AFTER user_id");
+            $pdo->exec("CREATE INDEX idx_config_admin ON qa_tool_configs(admin_user_id)");
         }
     } catch (Exception $e) {
     }
