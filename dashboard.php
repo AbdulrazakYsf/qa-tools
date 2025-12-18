@@ -694,7 +694,36 @@ if (isset($_GET['api'])) {
           case 'stock':
             $res = ToolRunner::run_stock($toolInput);
             break;
-          // Will add more cases here...
+
+          /* --- Newly Migrated Tools --- */
+          case 'headers_check':
+            $res = ToolRunner::run_headers_check($toolInput);
+            break;
+          case 'speed_test':
+            $res = ToolRunner::run_speed_test($toolInput);
+            break;
+          case 'json_validator':
+            $res = ToolRunner::run_json_validator($toolInput);
+            break;
+          case 'asset_count':
+            $res = ToolRunner::run_asset_count($toolInput);
+            break;
+          case 'images':
+            $res = ToolRunner::run_images($toolInput);
+            break;
+          case 'link_extractor':
+            $res = ToolRunner::run_link_extractor($toolInput);
+            break;
+          case 'get_categories':
+            $res = ToolRunner::run_get_categories($toolInput);
+            break;
+          case 'sub_category':
+            $res = ToolRunner::run_sub_category($toolInput);
+            break;
+          case 'category_filter':
+            $res = ToolRunner::run_category_filter($toolInput);
+            break;
+
           default:
             // Temporary fallback for tools not yet migrated (will return empty or error)
             echo json_encode(['error' => "Tool '$code' not yet migrated to API"]);
