@@ -106,35 +106,37 @@
 
             if (!input) return;
 
-            let jsonStr = input;
-
-            // If URL
-            if (/^https?:\/\//.test(input)) {
-                try {
-                    const resp = await fetch(input);
-                    jsonStr = await resp.text();
-                } catch (e) {
-                    msg.textContent = 'Fetch Error: ' + e.message;
-                    msg.className = 'status invalid';
-                    msg.style.display = 'block';
-                    return;
-                }
-            }
+            msg.textContent = 'Validating...';
+            msg.className = 'status';
+            msg.style.display = 'block';
 
             try {
-                const obj = JSON.parse(jsonStr);
-                msg.textContent = '✅ Valid JSON';
-                msg.className = 'status valid';
-                msg.style.display = 'block';
-                out.textContent = JSON.stringify(obj, null, 2);
-                out.style.display = 'block';
+                if (!window.parent || !window.parent.api) throw new Error("API not found");
+
+                const res = await window.parent.api('run-tool', {
+                    code: 'json_validator',
+                    input: { content: input }
+                });
+
+                if (res.valid) {
+                    msg.innerHTML = `✅ Valid JSON <small>(${res.source})</small>`;
+                    msg.className = 'status valid';
+                    msg.style.display = 'block';
+                    out.textContent = res.formatted;
+                    out.style.display = 'block';
+                } else {
+                    msg.innerHTML = `❌ Invalid JSON <br><small>${res.error}</small>`;
+                    msg.className = 'status invalid';
+                    msg.style.display = 'block';
+                }
             } catch (e) {
-                msg.textContent = '❌ Invalid JSON: ' + e.message;
+                msg.textContent = 'System Error: ' + e.message;
                 msg.className = 'status invalid';
                 msg.style.display = 'block';
             }
         }
     </script>
+    <script src="qa_bridge.js"></script>
 </body>
 
 </html>

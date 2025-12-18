@@ -132,33 +132,61 @@
             const tbody = document.getElementById('tbody');
             tbody.innerHTML = '';
 
-            for (const url of urls) {
+            if (!urls.length) return;
+
+            // Create rows
+            urls.forEach(url => {
                 const tr = document.createElement('tr');
+                tr.id = 'row-' + btoa(url).replace(/=/g, '');
                 tr.innerHTML = `<td>${url}</td><td>Testing...</td><td>-</td><td>-</td><td>-</td>`;
                 tbody.appendChild(tr);
+            });
 
-                const start = performance.now();
-                try {
-                    const resp = await fetch(url, { cache: 'no-store' });
-                    const ttfb = Math.round(performance.now() - start);
-                    const blob = await resp.blob();
-                    const total = Math.round(performance.now() - start);
+            try {
+                if (!window.parent || !window.parent.api) throw new Error("API not found");
 
-                    const status = resp.ok ? (ttfb < 500 ? 'FAST' : 'SLOW') : 'ERR';
-                    const badge = resp.ok ? (ttfb < 500 ? 'ok' : 'slow') : 'err';
+                const res = await window.parent.api('run-tool', {
+                    code: 'speed_test',
+                    input: { urls }
+                });
+
+                const results = res.rows || res;
+
+                results.forEach(r => {
+                    const tr = document.getElementById('row-' + btoa(r.url).replace(/=/g, ''));
+                    if (!tr) return;
+
+                    if (r.error) {
+                        tr.innerHTML = `<td>${r.url}</td><td><span class="badge err">FAIL</span></td><td colspan="3">${r.error}</td>`;
+                        return;
+                    }
+
+                    const t = r.timing || {};
+                    const ttfb = t.ttfb || 0;
+                    const total = t.total || 0;
+                    const size = (t.size_kb || 0) * 1024;
+
+                    const statusCode = r.status;
+                    const ok = statusCode >= 200 && statusCode < 300;
+                    const statusText = ok ? (ttfb < 500 ? 'FAST' : 'SLOW') : 'ERR';
+                    const badge = ok ? (ttfb < 500 ? 'ok' : 'slow') : 'err';
 
                     tr.innerHTML = `
-        <td><a href="${url}" target="_blank">${url}</a></td>
-        <td><span class="badge ${badge}">${resp.status} ${status}</span></td>
-        <td>${ttfb}</td>
-        <td>${total}</td>
-        <td>${blob.size}</td>`;
-                } catch (e) {
-                    tr.innerHTML = `<td>${url}</td><td><span class="badge err">FAIL</span></td><td colspan="3">${e.message}</td>`;
-                }
+                        <td><a href="${r.url}" target="_blank">${r.url}</a></td>
+                        <td><span class="badge ${badge}">${statusCode} ${statusText}</span></td>
+                        <td>${ttfb}</td>
+                        <td>${total}</td>
+                        <td>${Math.round(size)}</td>`;
+                });
+
+            } catch (e) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td colspan="5" style="color:red">System Error: ${e.message}</td>`;
+                tbody.insertBefore(tr, tbody.firstChild);
             }
         }
     </script>
+    <script src="qa_bridge.js"></script>
 </body>
 
 </html>

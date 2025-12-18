@@ -108,30 +108,40 @@
             const out = document.getElementById('output');
             out.innerHTML = 'Processing...';
 
-            let html = '';
-            for (const url of urls) {
-                html += `<div class="url-group"><div class="url-header">${url}</div><ul>`;
-                try {
-                    const resp = await fetch(url);
-                    const text = await resp.text();
-                    // Simple regex for hrefs
-                    const matches = text.match(/href=["'](.*?)["']/g) || [];
-                    const links = matches.map(m => m.replace(/href=["']|["']/g, '')).filter(l => l && !l.startsWith('#') && !l.startsWith('javascript:'));
+            if (!urls.length) return;
 
-                    if (links.length) {
-                        html += links.map(l => `<li><a href="${l}" target="_blank">${l}</a></li>`).join('');
-                        html += `<li><strong>Found: ${links.length} links</strong></li>`;
+            try {
+                if (!window.parent || !window.parent.api) throw new Error("API not found");
+
+                const res = await window.parent.api('run-tool', {
+                    code: 'link_extractor',
+                    input: { urls }
+                });
+
+                const results = res.rows || res;
+                let html = '';
+
+                results.forEach(r => {
+                    html += `<div class="url-group"><div class="url-header">${r.url}</div><ul>`;
+                    if (r.error) {
+                        html += `<li style="color:red">Error: ${r.error}</li>`;
+                    } else if (r.links && r.links.length) {
+                        html += r.links.map(l => `<li><a href="${l}" target="_blank">${l}</a></li>`).join('');
+                        html += `<li><strong>Found: ${r.links.length} links</strong></li>`;
                     } else {
-                        html += `<li>No links found (or blocked).</li>`;
+                        html += `<li>No links found.</li>`;
                     }
-                } catch (e) {
-                    html += `<li style="color:red">Error: ${e.message}</li>`;
-                }
-                html += `</ul></div>`;
+                    html += `</ul></div>`;
+                });
+
+                out.innerHTML = html || 'No results.';
+
+            } catch (e) {
+                out.innerHTML = `<div style="color:red">System Error: ${e.message}</div>`;
             }
-            out.innerHTML = html || 'No results.';
         }
     </script>
+    <script src="qa_bridge.js"></script>
 </body>
 
 </html>

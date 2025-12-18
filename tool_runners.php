@@ -17,7 +17,18 @@ class ToolRunner
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 120); // 2 mins per request max
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For simplicity, though usually bad practice
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For simplicity
+
+        // Header Collection
+        $responseHeaders = [];
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($curl, $header) use (&$responseHeaders) {
+            $len = strlen($header);
+            $parts = explode(':', $header, 2);
+            if (count($parts) >= 2) {
+                $responseHeaders[trim($parts[0])] = trim($parts[1]);
+            }
+            return $len;
+        });
 
         // Default Headers
         $defaultHeaders = [
@@ -39,16 +50,23 @@ class ToolRunner
         }
 
         $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $info = curl_getinfo($ch);
         $error = curl_error($ch);
         curl_close($ch);
 
         $json = json_decode($response, true);
         return [
-            'ok' => ($httpCode >= 200 && $httpCode < 300),
-            'status' => $httpCode,
-            'data' => $json ?? $response,
-            'error' => $error
+            'ok' => ($info['http_code'] >= 200 && $info['http_code'] < 300),
+            'status' => $info['http_code'],
+            'data' => $json ?? $response,     // parsed JSON if valid, else raw string
+            'raw_body' => $response,          // always raw string
+            'error' => $error,
+            'headers' => $responseHeaders,
+            'timing' => [
+                'total' => $info['total_time'] * 1000,        // ms
+                'ttfb' => $info['starttransfer_time'] * 1000, // ms
+                'size' => $info['size_download']              // bytes
+            ]
         ];
     }
 
@@ -647,6 +665,399 @@ class ToolRunner
             }
         }
         return array_unique($out);
+    }
+
+    /* ---------- 8. Headers Check ---------- */
+    public static function run_headers_check($input)
+    {
+        $urls = $input['urls'] ?? [];
+        $results = [];
+        foreach ($urls as $url) {
+            $res = self::request('HEAD', $url);
+            $results[] = [
+                'url' => $url,
+                'status' => $res['status'],
+                'statusText' => $res['ok'] ? 'OK' : 'Error',
+                'headers' => $res['headers'],
+                'error' => $res['error']
+            ];
+        }
+        return $results;
+    }
+
+    /* ---------- 9. Speed Test ---------- */
+    public static function run_speed_test($input)
+    {
+        $urls = $input['urls'] ?? [];
+        $results = [];
+        foreach ($urls as $url) {
+            $res = self::request('GET', $url);
+            $results[] = [
+                'url' => $url,
+                'status' => $res['status'],
+                'ok' => $res['ok'],
+                'timing' => $res['timing'],
+                'size' => $res['timing']['size'],
+                'error' => $res['error']
+            ];
+        }
+        return $results;
+    }
+
+    /* ---------- 10. JSON Validator ---------- */
+    public static function run_json_validator($input)
+    {
+        $content = $input['content'] ?? '';
+        $isUrl = preg_match('/^https?:\/\//', $content);
+        
+        $jsonStr = $content;
+        $fetched = false;
+        $error = null;
+
+        if ($isUrl) {
+            $res = self::request('GET', $content);
+            if ($res['ok']) {
+                $jsonStr = $res['raw_body'];
+                $fetched = true;
+            } else {
+                return ['valid' => false, 'error' => 'Fetch Failed: ' . $res['error']];
+            }
+        }
+
+        $valid = false;
+        $data = null;
+        try {
+            $data = json_decode($jsonStr, true, 512, JSON_THROW_ON_ERROR);
+            $valid = true;
+        } catch (Exception $e) {
+            $error = $e->getMessage();
+        }
+
+        return [
+            'valid' => $valid,
+            'error' => $error,
+            'formatted' => $valid ? json_encode($data, JSON_PRETTY_PRINT) : null,
+            'source' => $fetched ? 'url' : 'text'
+        ];
+    }
+
+    /* ---------- 11. Asset Count ---------- */
+    public static function run_asset_count($input)
+    {
+        $urls = $input['urls'] ?? [];
+        $results = [];
+        foreach ($urls as $url) {
+            $res = self::request('GET', $url);
+            if (!$res['ok']) {
+                $results[] = [
+                    'url' => $url,
+                     'error' => $res['error'],
+                     'imgs' => 0, 'scripts' => 0, 'css' => 0, 'sizeKB' => 0
+                ];
+                continue;
+            }
+            $html = $res['raw_body'];
+            // Simple regex match
+            $imgs = preg_match_all('/<img\s/i', $html);
+            $scripts = preg_match_all('/<script/i', $html);
+            $css = preg_match_all('/<link\s[^>]*rel=["\']stylesheet["\']/i', $html); 
+            $sizeKB = round(strlen($html) / 1024);
+
+            $results[] = [
+                'url' => $url,
+                'imgs' => $imgs,
+                'scripts' => $scripts,
+                'css' => $css,
+                'sizeKB' => $sizeKB
+            ];
+        }
+        return $results;
+    }
+
+    /* ---------- 12. Image Link Checker ---------- */
+    public static function run_images($input)
+    {
+        $urls = $input['parents'] ?? [];
+        $results = [];
+
+        foreach ($urls as $parent) {
+            $res = self::request('GET', $parent);
+            if (!$res['ok']) continue;
+
+            $imgs = self::extract_images_from_cms($res['data']);
+            
+            foreach ($imgs as $imgUrl) {
+                // Check image
+                $check = self::request('GET', $imgUrl);
+                // Validation logic: check for <Error> tag in body creates 'Invalid', OR http error
+                $valid = $check['ok'];
+                if ($valid) {
+                    $body = $check['raw_body'];
+                    if (strpos($body, '<Error>') !== false && strpos($body, '</Error>') !== false) {
+                        $valid = false;
+                    }
+                }
+                $results[] = [
+                    'parent' => $parent,
+                    'link' => $imgUrl,
+                    'status' => $valid ? 'Valid' : 'Invalid'
+                ];
+            }
+        }
+        return $results;
+    }
+
+    private static function extract_images_from_cms($data)
+    {
+        $items = $data['cms_items']['items'] ?? ($data['data']['cms_items']['items'] ?? []);
+        $out = [];
+        foreach ($items as $obj) {
+            $raw = $obj['item'] ?? '';
+            $entries = explode('||', $raw);
+            foreach ($entries as $entry) {
+                $parts = explode(',', $entry);
+                $first = $parts[0] ?? '';
+                if (preg_match('/\.(jpg|jpeg|png|gif|webp)$/i', $first)) {
+                    $out[] = $first;
+                }
+            }
+        }
+        return array_unique($out);
+    }
+
+    /* ---------- 13. Link Extractor ---------- */
+    public static function run_link_extractor($input)
+    {
+        $urls = $input['urls'] ?? [];
+        $results = [];
+
+        foreach ($urls as $url) {
+            $res = self::request('GET', $url);
+            if (!$res['ok']) {
+                $results[] = ['url' => $url, 'links' => [], 'error' => $res['error']];
+                continue;
+            }
+            $html = $res['raw_body'];
+            // Simple regex for href
+            preg_match_all('/href=["\'](.*?)["\']/i', $html, $matches);
+            $links = [];
+            foreach ($matches[1] as $l) {
+                $l = trim($l);
+                if ($l && !str_starts_with($l, '#') && !str_starts_with($l, 'javascript:')) {
+                    $links[] = $l;
+                }
+            }
+            $results[] = ['url' => $url, 'links' => $links, 'count' => count($links)];
+        }
+        return $results;
+    }
+        return $results;
+    }
+
+    /* ---------- 14. Get Categories Links ---------- */
+    public static function run_get_categories($input)
+    {
+        $urls = $input['urls'] ?? [];
+        $results = [];
+
+        foreach ($urls as $parent) {
+            $res = self::request('GET', $parent);
+            if (!$res['ok']) continue;
+
+            $codes = [];
+            $data = $res['data']['data'] ?? [];
+            if (is_array($data)) {
+                 foreach ($data as $o) {
+                    if (!empty($o['category_code'])) $codes[] = $o['category_code'];
+                 }
+            }
+
+            $parts = explode('/', $parent);
+            if (count($parts) < 6) continue;
+            $basePrefix = implode('/', array_slice($parts, 0, 5)) . '/';
+            $store = $parts[5];
+
+            foreach ($codes as $c) {
+                $link = "{$basePrefix}{$store}/cmspage/page-v2/{$c}";
+                
+                $check = self::request('GET', $link);
+                $status = 'Warning';
+                if ($check['ok']) {
+                     $d = $check['data'];
+                     $items = $d['data']['cms_items']['items'] ?? [];
+                     if (!empty($items)) $status = 'OK';
+                }
+
+                $results[] = ['link' => $link, 'status' => $status, 'parent' => $parent];
+            }
+        }
+        return $results;
+    }
+
+    /* ---------- 15. Sub-Category Link Checker ---------- */
+    public static function run_sub_category($input)
+    {
+        $urls = $input['urls'] ?? [];
+        $results = [];
+
+        foreach ($urls as $parentUrl) {
+            $res = self::request('GET', $parentUrl);
+            if (!$res['ok']) continue;
+            
+            $data = $res['data']['data'] ?? [];
+            if (!is_array($data)) continue;
+
+            $flat = [];
+            foreach ($data as $o) {
+                if (empty($o['id'])) continue;
+                $children = $o['children_data'] ?? [];
+                foreach ($children as $ch) {
+                     $flat[] = [
+                         'id' => $ch['id'],
+                         'parent_id' => $o['id'],
+                         'parent_name' => $o['name'] ?? '',
+                         'child_name' => $ch['name'] ?? ''
+                     ];
+                }
+            }
+
+            $parts = explode('/', $parentUrl);
+            $basePrefix = implode('/', array_slice($parts, 0, 5)) . '/';
+            $store = $parts[5];
+            $catBase = "{$basePrefix}{$store}/catalogv1/category/store/" . str_replace('_', '-', $store) . "/category_ids/";
+
+            foreach ($flat as $item) {
+                $link = $catBase . $item['id'];
+                $pUrl = $catBase . $item['parent_id'];
+                
+                $check = self::request('GET', $link);
+                $ok = false;
+                if ($check['ok']) {
+                    $hits = $check['data']['hits']['hits'] ?? ($check['data']['data']['hits']['hits'] ?? []);
+                    if (count($hits) > 0) $ok = true;
+                }
+
+                $results[] = [
+                    'link' => $link,
+                    'status' => $ok ? 'OK' : 'Warning',
+                    'parentUrl' => $pUrl,
+                    'parentName' => $item['parent_name'],
+                    'childName' => $item['child_name']
+                ];
+            }
+        }
+        return $results;
+    }
+
+    /* ---------- 16. Filtered-Category Link Checker ---------- */
+    public static function run_category_filter($input)
+    {
+        $urls = $input['urls'] ?? [];
+        $results = [];
+
+        foreach ($urls as $parent) {
+            $res = self::request('GET', $parent);
+            if (!$res['ok']) continue;
+
+            $title = $res['data']['data']['cms_items']['title'] ?? 'N/A';
+            $parts = explode('/', $parent);
+            $baseUrl1 = explode('/api', $parent)[0] . '/api/';
+            $store = str_replace('_', '-', $parts[5] ?? 'sa-en');
+
+            $items = self::parse_filtered_items($res['data']);
+            
+            // Build URLs
+            foreach ($items as $item) {
+                $catId = $item['catId'];
+                $filters = $item['filters'];
+                
+                $url = "{$baseUrl1}catalogv2/product/store/{$store}/category_ids/{$catId}";
+                foreach ($filters as $k => $vals) {
+                    if ($k === 'sort') {
+                        // val is "field:dir" encoded? logic: decode, replace %3A, split
+                        $raw = $vals[0];
+                        $decoded = str_replace('%3A', ':', urldecode($raw));
+                        $p = explode(':', $decoded);
+                        $field = $p[0];
+                        $dir = $p[1] ?? 'asc';
+                        $url .= "/sort-{$field}/{$dir}";
+                        continue;
+                    }
+                    // Copy logic
+                    $processed = $vals;
+                    if ($k === 'price' || $k === 'jb_discount_percentage') {
+                        $processed = array_map(function($v){ return str_replace('-', ',', $v); }, $processed);
+                    }
+                    $joined = implode(',', $processed);
+                    $url .= "/{$k}/{$joined}";
+                }
+                $url .= '/aggregation/true/size/12';
+                if (!isset($filters['sort'])) {
+                    $url .= '/sort-priority/asc';
+                }
+
+                // Verify
+                $check = self::request('GET', $url);
+                $ok = false;
+                if ($check['ok']) {
+                     $hits = $check['data']['hits']['hits'] ?? ($check['data']['data']['hits']['hits'] ?? []);
+                     if (count($hits) > 0) $ok = true;
+                }
+
+                $results[] = [
+                    'link' => $url,
+                    'status' => $ok ? 'OK' : 'Warning',
+                    'parent' => $parent,
+                    'title' => $title
+                ];
+            }
+        }
+        return $results;
+    }
+
+    private static function parse_filtered_items($json)
+    {
+        $list = $json['data']['cms_items']['items'] ?? ($json['data']['data']['cms_items']['items'] ?? []);
+        $out = [];
+        foreach ($list as $obj) {
+            $itemStr = $obj['item'] ?? '';
+            
+            // 1. Classic Pattern: split || -> split , -> check [1]=='filtered'
+            $segments = explode('||', $itemStr);
+            foreach ($segments as $str) {
+                $p = explode(',', $str);
+                if (($p[1]??'') === 'filtered') {
+                    $catId = $p[2] ?? '';
+                    $rest = array_slice($p, 3);
+                    $filters = [];
+                    for ($i = 0; $i < count($rest); $i += 2) {
+                        $k = $rest[$i];
+                        $v = $rest[$i+1] ?? null;
+                        if (!$k || $v === null) continue;
+                        $filters[$k][] = $v;
+                    }
+                    $out[] = ['catId' => $catId, 'filters' => $filters];
+                }
+            }
+
+            // 2. New Collection Style: split || -> find 'filtered' token -> next token is CSV
+            foreach ($segments as $idx => $s) {
+                if ($s === 'filtered' && isset($segments[$idx+1])) {
+                    $parts = explode(',', $segments[$idx+1]);
+                    $catId = $parts[0];
+                    $rest = array_slice($parts, 1);
+                     $filters = [];
+                    for ($i = 0; $i < count($rest); $i += 2) {
+                        $k = $rest[$i];
+                        $v = $rest[$i+1] ?? null;
+                        if (!$k || $v === null) continue;
+                        $filters[$k][] = $v;
+                    }
+                    $out[] = ['catId' => $catId, 'filters' => $filters];
+                }
+            }
+        }
+        return $out;
     }
 }
 ?>

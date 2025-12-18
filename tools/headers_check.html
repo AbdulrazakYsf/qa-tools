@@ -110,27 +110,55 @@
             const out = document.getElementById('output');
             out.innerHTML = '';
 
-            for (const url of urls) {
+            if (!urls.length) return;
+
+            // Show loading state
+            urls.forEach(url => {
                 const div = document.createElement('div');
+                div.id = 'row-' + btoa(url).replace(/=/g, '');
                 div.innerHTML = `<div class="status-line">Fetching ${url}...</div>`;
                 out.appendChild(div);
+            });
 
-                try {
-                    const resp = await fetch(url, { method: 'HEAD' });
-                    let html = `<div class="status-line" style="border-color:${resp.ok ? '#43A047' : '#E53935'}">${resp.status} ${resp.statusText}</div>`;
-                    html += `<table class="header-table"><tr><th>Header</th><th>Value</th></tr>`;
+            try {
+                if (!window.parent || !window.parent.api) throw new Error("API not found");
 
-                    for (const [key, val] of resp.headers) {
-                        html += `<tr><td class="key">${key}</td><td>${val}</td></tr>`;
+                const res = await window.parent.api('run-tool', {
+                    code: 'headers_check',
+                    input: { urls }
+                });
+
+                const results = res.rows || res; // depending on how runner returns it. Runner returns array directly.
+                // Actually tool_runners usually return array. But the bridge might wrap it?
+                // `dashboard.php` usually returns whatever `run_tool` returns as JSON.
+                // Let's assume it returns the array.
+
+                results.forEach(r => {
+                    const div = document.getElementById('row-' + btoa(r.url).replace(/=/g, ''));
+                    if (!div) return;
+
+                    let html = `<div class="status-line" style="border-color:${r.status >= 200 && r.status < 300 ? '#43A047' : '#E53935'}">${r.status} ${r.statusText || ''}</div>`;
+
+                    if (r.error) {
+                        html += `<div style="color:red;padding:10px">${r.error}</div>`;
                     }
-                    html += `</table>`;
+
+                    if (r.headers) {
+                        html += `<table class="header-table"><tr><th>Header</th><th>Value</th></tr>`;
+                        for (const [key, val] of Object.entries(r.headers)) {
+                            html += `<tr><td class="key">${key}</td><td>${val}</td></tr>`;
+                        }
+                        html += `</table>`;
+                    }
                     div.innerHTML = html;
-                } catch (e) {
-                    div.innerHTML = `<div class="status-line" style="border-color:#E53935">Error: ${e.message}</div>`;
-                }
+                });
+
+            } catch (e) {
+                out.innerHTML += `<div style="color:red;margin-top:20px">System Error: ${e.message}</div>`;
             }
         }
     </script>
+    <script src="qa_bridge.js"></script>
 </body>
 
 </html>

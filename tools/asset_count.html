@@ -112,32 +112,51 @@
             const tbody = document.getElementById('tbody');
             tbody.innerHTML = '';
 
-            for (const url of urls) {
+            if (!urls.length) return;
+
+            // Create rows
+            urls.forEach(url => {
                 const tr = document.createElement('tr');
+                tr.id = 'row-' + btoa(url).replace(/=/g, '');
                 tr.innerHTML = `<td>${url}</td><td colspan="4">Fetching...</td>`;
                 tbody.appendChild(tr);
+            });
 
-                try {
-                    const resp = await fetch(url);
-                    const text = await resp.text();
+            try {
+                if (!window.parent || !window.parent.api) throw new Error("API not found");
 
-                    const imgs = (text.match(/<img\s/g) || []).length;
-                    const scripts = (text.match(/<script/g) || []).length;
-                    const css = (text.match(/<link\s[^>]*rel=["']stylesheet["']/g) || []).length;
-                    const size = Math.round(text.length / 1024);
+                const res = await window.parent.api('run-tool', {
+                    code: 'asset_count',
+                    input: { urls }
+                });
+
+                const results = res.rows || res;
+
+                results.forEach(r => {
+                    const tr = document.getElementById('row-' + btoa(r.url).replace(/=/g, ''));
+                    if (!tr) return;
+
+                    if (r.error) {
+                        tr.innerHTML = `<td>${r.url}</td><td colspan="4" style="color:red">${r.error}</td>`;
+                        return;
+                    }
 
                     tr.innerHTML = `
-        <td><a href="${url}" target="_blank">${url}</a></td>
-        <td><span class="count-badge" style="background:#e3f2fd;color:#1565C0">${imgs}</span></td>
-        <td><span class="count-badge" style="background:#fff3e0;color:#E65100">${scripts}</span></td>
-        <td><span class="count-badge" style="background:#f3e5f5;color:#4A148C">${css}</span></td>
-        <td>${size} KB</td>`;
-                } catch (e) {
-                    tr.innerHTML = `<td>${url}</td><td colspan="4" style="color:red">Error: ${e.message}</td>`;
-                }
+                        <td><a href="${r.url}" target="_blank">${r.url}</a></td>
+                        <td><span class="count-badge" style="background:#e3f2fd;color:#1565C0">${r.imgs}</span></td>
+                        <td><span class="count-badge" style="background:#fff3e0;color:#E65100">${r.scripts}</span></td>
+                        <td><span class="count-badge" style="background:#f3e5f5;color:#4A148C">${r.css}</span></td>
+                        <td>${r.sizeKB} KB</td>`;
+                });
+
+            } catch (e) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td colspan="5" style="color:red">System Error: ${e.message}</td>`;
+                tbody.insertBefore(tr, tbody.firstChild);
             }
         }
     </script>
+    <script src="qa_bridge.js"></script>
 </body>
 
 </html>
