@@ -158,8 +158,8 @@ class ToolRunner
                 continue;
             }
 
-            // Extract Brands (Recursive logic)
-            $brands = self::extract_brands_recursive($res['data']);
+            // Extract Brands (CMS Items logic)
+            $brands = self::extract_brands_from_cms($res['data']);
             $uniqueBrands = array_unique($brands);
 
             // Construct Links
@@ -194,17 +194,21 @@ class ToolRunner
         return $results;
     }
 
-    private static function extract_brands_recursive($json)
+    private static function extract_brands_from_cms($data)
     {
+        $items = $data['cms_items']['items'] ?? ($data['data']['cms_items']['items'] ?? []);
         $found = [];
-        if (is_array($json)) {
-            foreach ($json as $key => $value) {
-                if ($key === 'brand' || $key === 'brand_name') {
-                    if (is_string($value) && $value !== '')
-                        $found[] = $value;
-                }
-                if (is_array($value)) {
-                    $found = array_merge($found, self::extract_brands_recursive($value));
+
+        foreach ($items as $obj) {
+            if (!isset($obj['item']) || !is_string($obj['item'])) continue;
+            
+            $entries = explode('||', $obj['item']);
+            foreach ($entries as $entry) {
+                // entry format: type,key,value... e.g. "type,brand,Samsung"
+                $parts = explode(',', $entry);
+                // Check for 'brand' at index 1
+                if (isset($parts[1]) && $parts[1] === 'brand' && !empty($parts[2])) {
+                    $found[] = $parts[2];
                 }
             }
         }
