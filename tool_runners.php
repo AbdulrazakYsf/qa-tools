@@ -851,8 +851,7 @@ class ToolRunner
         }
         return $results;
     }
-        return $results;
-    }
+
 
     /* ---------- 14. Get Categories Links ---------- */
     public static function run_get_categories($input)
