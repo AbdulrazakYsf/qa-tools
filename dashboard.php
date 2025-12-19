@@ -2338,9 +2338,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                      <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                        <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                      </option>
+                        <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                          <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                        </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -2920,7 +2920,7 @@ $TOOL_DEFS = [
               if (Array.isArray(w.rows)) {
                 w.rows.forEach(r => {
                   if (!r) return;
-                  const status = (r.status || '').toString();
+                  const status = (r.status || '').toString().trim();
                   const url = r.link || r.url || r.href || r.cms || r.endpoint || '';
                   const parent = r.parent || r.source || r.origin || '';
                   const row = { status, url, parent };
@@ -2934,13 +2934,13 @@ $TOOL_DEFS = [
                   const s = status.toUpperCase();
                   if (!s) return;
                   tests++;
-                  if (s === 'OK' || s === 'VALID' || s === 'SUCCESS' || s === 'IN STOCK') passed++;
+                  if (s === 'OK' || s === 'VALID' || s === 'SUCCESS' || s === 'IN STOCK' || s === 'PASS' || s === 'PASSED') passed++;
                   else { failed++; open++; }
                 });
               } else {
                 const els = doc.querySelectorAll('[data-status]');
                 els.forEach(el => {
-                  const status = (el.getAttribute('data-status') || '').toString();
+                  const status = (el.getAttribute('data-status') || '').toString().trim();
                   const s = status.toUpperCase();
                   let url = el.getAttribute('data-url') || '';
                   if (!url) {
@@ -2953,7 +2953,7 @@ $TOOL_DEFS = [
 
                   if (!s) return;
                   tests++;
-                  if (s === 'OK' || s === 'VALID' || s === 'SUCCESS' || s === 'IN STOCK') passed++;
+                  if (s === 'OK' || s === 'VALID' || s === 'SUCCESS' || s === 'IN STOCK' || s === 'PASS' || s === 'PASSED') passed++;
                   else { failed++; open++; }
                 });
               }

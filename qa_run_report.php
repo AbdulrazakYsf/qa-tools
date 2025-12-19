@@ -658,7 +658,7 @@ $passRate = $totalTests > 0 ? round(($run['passed'] / $totalTests) * 100, 1) : 0
                                     </thead>
                                     <tbody>
                                         <?php foreach ($toolData['rows'] as $row):
-                                            $status = strtoupper($row['status']);
+                                            $status = strtoupper(trim($row['status']));
                                             $badgeClass = 'fail';
                                             if ($status === 'OK' || $status === 'PASS' || $status === 'PASSED' || $status === 'VALID' || $status === 'SUCCESS' || $status === 'IN STOCK')
                                                 $badgeClass = 'ok';
