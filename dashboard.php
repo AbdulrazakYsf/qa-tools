@@ -597,9 +597,12 @@ if (isset($_GET['api'])) {
         // METRICS ENHANCEMENT
 
         // 1. Pass Rate
+        // 1. Pass Rate (Item Level)
+        $sumTotal = $getStat("SELECT COALESCE(SUM(total_tests),0) AS c FROM qa_test_runs $where", $params);
+        $sumPassed = $getStat("SELECT COALESCE(SUM(passed),0) AS c FROM qa_test_runs $where", $params);
         $passRate = 0;
-        if ($total > 0) {
-          $passRate = round(($passed / $total) * 100, 1);
+        if ($sumTotal > 0) {
+          $passRate = round(($sumPassed / $sumTotal) * 100, 1);
         }
 
         // 2. Utilized Tools (Distinct tool_code from results linked to these runs)
@@ -617,8 +620,8 @@ if (isset($_GET['api'])) {
         $sqlBreakdown = "
             SELECT 
                 res.tool_code,
-                SUM(CASE WHEN UPPER(res.status) IN ('OK','VALID','SUCCESS','IN STOCK') THEN 1 ELSE 0 END) as p,
-                SUM(CASE WHEN UPPER(res.status) NOT IN ('OK','VALID','SUCCESS','IN STOCK') THEN 1 ELSE 0 END) as f
+                SUM(CASE WHEN UPPER(res.status) IN ('OK','VALID','SUCCESS','IN STOCK','PASS','PASSED') THEN 1 ELSE 0 END) as p,
+                SUM(CASE WHEN UPPER(res.status) NOT IN ('OK','VALID','SUCCESS','IN STOCK','PASS','PASSED') THEN 1 ELSE 0 END) as f
             FROM qa_run_results res
             INNER JOIN qa_test_runs tr ON res.run_id = tr.id
             $where
@@ -2338,9 +2341,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                        <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                          <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                        </option>
+                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                    </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -3128,8 +3131,8 @@ $TOOL_DEFS = [
 
         try {
           if (cfg) {
-             const parsed = JSON.parse(cfg.config_json || '{}');
-             logToConsole(`Inputs for ${code}:\n${parsed.inputs || '(none)'}`, 'info');
+            const parsed = JSON.parse(cfg.config_json || '{}');
+            logToConsole(`Inputs for ${code}:\n${parsed.inputs || '(none)'}`, 'info');
           }
           logToConsole(`Running ${code}...`, 'info');
           const result = await runToolWithConfig(code, cfg);
@@ -3158,7 +3161,7 @@ $TOOL_DEFS = [
           } else {
             logToConsole(`${code} Finished: ${result.passed} Pass, ${result.failed} Fail`, 'success');
           }
-          
+
           logToConsole(`Result: ${JSON.stringify(result, null, 2)}`, 'info');
 
         } catch (e) {
