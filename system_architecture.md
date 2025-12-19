@@ -23,6 +23,7 @@ The system relies on a relational schema for persistence:
 *   **`qa_users`**: Stores authentication data (`email`, `password_hash`, `role`, `avatar_url`).
 *   **`qa_tool_configs`**: Stores JSON-encoded input configurations for tools.
 *   **`qa_test_runs`**: Stores summary metrics of execution runs.
+    *   **Note**: May contain an unused `input_data` column (TEXT) from a reverted migration. This column is deprecated and ignored by the application.
 *   **`qa_run_results`**: Stores the raw JSON output from tools.
 *   **`qa_support_messages`**: Stores support tickets.
     *   Columns: `user_id`, `subject`, `message`, `is_read`, `admin_reply`, `reply_at`.
