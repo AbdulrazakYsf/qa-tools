@@ -1914,6 +1914,7 @@ $TOOL_DEFS = [
       margin-bottom: 4px;
       border-bottom: 1px solid #21262d;
       padding-bottom: 2px;
+      white-space: pre-wrap;
     }
 
     .run-console .log-error {
@@ -2337,9 +2338,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                    </option>
+                      <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                        <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                      </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -3126,6 +3127,10 @@ $TOOL_DEFS = [
         }
 
         try {
+          if (cfg) {
+             const parsed = JSON.parse(cfg.config_json || '{}');
+             logToConsole(`Inputs for ${code}:\n${parsed.inputs || '(none)'}`, 'info');
+          }
           logToConsole(`Running ${code}...`, 'info');
           const result = await runToolWithConfig(code, cfg);
           totalTests += result.tests || 0;
@@ -3153,6 +3158,8 @@ $TOOL_DEFS = [
           } else {
             logToConsole(`${code} Finished: ${result.passed} Pass, ${result.failed} Fail`, 'success');
           }
+          
+          logToConsole(`Result: ${JSON.stringify(result, null, 2)}`, 'info');
 
         } catch (e) {
           console.error('Error running tool', code, e);
