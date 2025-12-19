@@ -484,8 +484,11 @@ if (isset($_GET['api'])) {
           break;
         }
 
-        $stmt = $db->prepare("INSERT INTO qa_test_runs (user_id, status, total_tests, passed, failed, open_issues, notes) VALUES (?,?,?,?,?,?,?)");
-        $stmt->execute([$userId, $status, $total, $passed, $failed, $open, $notes]);
+        $inputData = $input['input_data'] ?? null;
+        $outputData = $input['output_data'] ?? null;
+
+        $stmt = $db->prepare("INSERT INTO qa_test_runs (user_id, status, total_tests, passed, failed, open_issues, notes, input_data, output_data) VALUES (?,?,?,?,?,?,?,?,?)");
+        $stmt->execute([$userId, $status, $total, $passed, $failed, $open, $notes, $inputData, $outputData]);
         $runId = $db->lastInsertId();
 
         if ($runId && !empty($results)) {
@@ -2341,9 +2344,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                    </option>
+                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                  </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -3083,6 +3086,9 @@ $TOOL_DEFS = [
       let totalTests = 0, totalPassed = 0, totalFailed = 0, totalOpen = 0;
       const allDetails = [];
 
+      const allInputs = {};
+      const allFullResults = {};
+
       // Get current user for config prioritization (Admin loaded vs Personal vs Global)
       const curUserInfo = await api('get-profile');
       const curUserId = curUserInfo.id;
@@ -3131,12 +3137,15 @@ $TOOL_DEFS = [
 
         try {
           if (cfg) {
-            const parsed = JSON.parse(cfg.config_json || '{}');
-            logToConsole(`Inputs for ${code}:\n${parsed.inputs || '(none)'}`, 'info');
-          }
-          logToConsole(`Running ${code}...`, 'info');
-          const result = await runToolWithConfig(code, cfg);
-          totalTests += result.tests || 0;
+             const parsed = JSON.parse(cfg.config_json || '{}');
+             const inp = parsed.inputs || '(none)';
+             logToConsole(`Inputs for ${code}:\n${inp}`, 'info');
+             allInputs[code] = inp;
+           }
+           logToConsole(`Running ${code}...`, 'info');
+           const result = await runToolWithConfig(code, cfg);
+           allFullResults[code] = result;
+           totalTests += result.tests || 0;
           totalPassed += result.passed || 0;
           totalFailed += result.failed || 0;
           totalOpen += result.open || 0;
@@ -3195,6 +3204,8 @@ $TOOL_DEFS = [
 
         await api('save-run', {
           status: status,
+          input_data: JSON.stringify(allInputs),
+          output_data: JSON.stringify(allFullResults),
           total_tests: totalTests,
           passed: totalPassed,
           failed: totalFailed,

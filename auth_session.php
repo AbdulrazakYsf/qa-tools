@@ -92,6 +92,21 @@ function get_db_auth()
     } catch (Exception $e) {
     }
 
+    // Migration: Add input_data and output_data columns (v2.3.1)
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM qa_test_runs LIKE 'input_data'")->fetchAll();
+        if (count($cols) == 0)
+            $pdo->exec("ALTER TABLE qa_test_runs ADD COLUMN input_data LONGTEXT DEFAULT NULL");
+    } catch (Exception $e) {
+    }
+
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM qa_test_runs LIKE 'output_data'")->fetchAll();
+        if (count($cols) == 0)
+            $pdo->exec("ALTER TABLE qa_test_runs ADD COLUMN output_data LONGTEXT DEFAULT NULL");
+    } catch (Exception $e) {
+    }
+
     // Ensure qa_tool_configs table exists
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS qa_tool_configs (
