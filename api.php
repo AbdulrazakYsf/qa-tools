@@ -51,10 +51,21 @@ try {
     }
 
     // 2. Parse Input
-    $input = json_decode(file_get_contents('php://input'), true);
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        $input = [
+            'tool' => $_GET['tool'] ?? null,
+            'input' => $_GET
+        ];
+        // Remove 'tool' and 'api_key' from input data to keep it clean
+        unset($input['input']['tool']);
+        unset($input['input']['api_key']);
+    } else {
+        $input = json_decode(file_get_contents('php://input'), true);
+    }
+
     if (!$input || !isset($input['tool'])) {
         http_response_code(400);
-        echo json_encode(['error' => 'Invalid JSON body. "tool" field is required.']);
+        echo json_encode(['error' => 'Invalid Request. "tool" parameter is required.']);
         exit;
     }
 
