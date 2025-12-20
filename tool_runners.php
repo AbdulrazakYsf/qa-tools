@@ -165,7 +165,9 @@ class ToolRunner
     public static function run_brand($input)
     {
         // Input: 'parents' (array of strings)
-        $parents = $input['parents'] ?? [];
+        $parents = $input['parents'] ?? ($input['urls'] ?? []);
+        if (is_string($parents))
+            $parents = [$parents];
         $results = [];
 
         foreach ($parents as $parentUrl) {
@@ -288,7 +290,9 @@ class ToolRunner
     /* ---------- 4. Products / SKU Checker ---------- */
     public static function run_products($input)
     {
-        $parents = $input['parents'] ?? [];
+        $parents = $input['parents'] ?? ($input['urls'] ?? []);
+        if (is_string($parents))
+            $parents = [$parents];
         $results = [];
 
         foreach ($parents as $parentUrl) {
@@ -413,7 +417,9 @@ class ToolRunner
     /* ---------- 5. Category Link Checker ---------- */
     public static function run_category($input)
     {
-        $parents = $input['parents'] ?? [];
+        $parents = $input['parents'] ?? ($input['urls'] ?? []);
+        if (is_string($parents))
+            $parents = [$parents];
         $results = [];
 
         foreach ($parents as $parentUrl) {
@@ -492,7 +498,9 @@ class ToolRunner
     public static function run_sku($input)
     {
         // Similar to products but filtering only single type
-        $parents = $input['parents'] ?? [];
+        $parents = $input['parents'] ?? ($input['urls'] ?? []);
+        if (is_string($parents))
+            $parents = [$parents];
         $results = [];
 
         foreach ($parents as $parentUrl) {
@@ -557,7 +565,9 @@ class ToolRunner
     /* ---------- 7. Stock / Availability Checker ---------- */
     public static function run_stock($input)
     {
-        $parents = $input['parents'] ?? [];
+        $parents = $input['parents'] ?? ($input['urls'] ?? []);
+        if (is_string($parents))
+            $parents = [$parents];
         $results = [];
 
         foreach ($parents as $parentUrl) {
@@ -783,7 +793,9 @@ class ToolRunner
     /* ---------- 12. Image Link Checker ---------- */
     public static function run_images($input)
     {
-        $urls = $input['parents'] ?? [];
+        $urls = $input['parents'] ?? ($input['urls'] ?? []);
+        if (is_string($urls))
+            $urls = [$urls];
         $results = [];
 
         foreach ($urls as $parent) {
@@ -1002,7 +1014,8 @@ class ToolRunner
                     $processed = $vals;
                     if ($k === 'price' || $k === 'jb_discount_percentage') {
                         $processed = array_map(function ($v) {
-                            return str_replace('-', ',', $v); }, $processed);
+                            return str_replace('-', ',', $v);
+                        }, $processed);
                     }
                     $joined = implode(',', $processed);
                     $url .= "/{$k}/{$joined}";
