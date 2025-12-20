@@ -740,6 +740,27 @@ if (isset($_GET['api'])) {
         echo json_encode(['rows' => $res]);
         break;
 
+      /* --- API Access --- */
+      case 'get-api-key':
+        // Retrieve current key
+        $userId = $currentUser['id'];
+        $db = qa_db();
+        $stmt = $db->prepare("SELECT api_key FROM qa_users WHERE id = ?");
+        $stmt->execute([$userId]);
+        $res = $stmt->fetch();
+        echo json_encode(['api_key' => $res['api_key'] ?? null]);
+        break;
+
+      case 'generate-api-key':
+        // Generate new random key
+        $userId = $currentUser['id'];
+        $newKey = bin2hex(random_bytes(32)); // 64 chars
+        $db = qa_db();
+        $stmt = $db->prepare("UPDATE qa_users SET api_key = ? WHERE id = ?");
+        $stmt->execute([$newKey, $userId]);
+        echo json_encode(['api_key' => $newKey]);
+        break;
+
       default:
         http_response_code(404);
         echo json_encode(['error' => 'Unknown api']);
@@ -2116,6 +2137,7 @@ $TOOL_DEFS = [
       <button class="tab-btn" data-tab="configs">Configurations</button>
       <button class="tab-btn" data-tab="users">Users</button>
       <button class="tab-btn" data-tab="support">Support Center</button>
+      <button class="tab-btn" data-tab="api">API Access</button>
     </div>
 
     <!-- DASHBOARD TAB -->
@@ -2565,6 +2587,49 @@ $TOOL_DEFS = [
         </div>
 
         <!-- Floating Switcher Removed -->
+      </div>
+    </div>
+  </section>
+
+  <!-- API TAB -->
+  <section id="tab-api" class="tab-content">
+    <div class="section-card">
+      <div class="section-header">
+        <h2>Public API Access</h2>
+      </div>
+      <div style="padding:20px;">
+        <p style="margin-top:0;">Use your API Key to access tools programmatically. <strong>Keep this key
+            secret.</strong></p>
+
+        <div style="background:#f8f9fa; padding:20px; border-radius:8px; border:1px solid #e0e0e0; margin-bottom:30px;">
+          <label style="display:block; font-size:12px; font-weight:bold; color:#555; margin-bottom:8px;">YOUR API
+            KEY</label>
+          <div style="display:flex; gap:10px;">
+            <input type="text" id="api-key-display" readonly value="" placeholder="No API Key generated yet"
+              class="form-control"
+              style="font-family:monospace; font-size:14px; letter-spacing:1px; flex:1; padding:10px;">
+            <button class="btn-secondary" onclick="toggleApiKeyVisibility()" id="btn-show-key">Show</button>
+            <button class="btn-secondary" onclick="copyApiKey()">Copy</button>
+            <button class="btn-primary" onclick="generateApiKey()">Re-Generate</button>
+          </div>
+          <small class="text-muted" style="display:block; margin-top:8px; color:#c62828;">Warning: Re-generating will
+            invalidate your old key immediately.</small>
+        </div>
+
+        <h3>Example Usage</h3>
+        <p style="font-size:13px; color:#555;">Send a POST request to <code>api.php</code> with your key in the header.
+        </p>
+        <div style="background:#263238; color:#eceff1; padding:20px; border-radius:8px; overflow-x:auto;">
+          <pre><code id="api-example-code" style="font-family:monospace; font-size:13px; line-height:1.5;">curl -X POST <?php echo str_replace('dashboard.php', 'api.php', (empty($_SERVER['HTTPS']) ? 'http' : 'https') . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]"); ?> \
+  -H "Authorization: Bearer <span id="example-key" style="color:#82b1ff;">YOUR_KEY</span>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tool": "sku",
+    "input": {
+      "urls": "https://www.jarir.com/sa-en/default-category/apple-iphone-16-pro-max-smartphones-767055.html"
+    }
+  }'</code></pre>
+        </div>
       </div>
     </div>
   </section>
@@ -4350,6 +4415,74 @@ $TOOL_DEFS = [
     /* Initial */
     Promise.all([loadConfigs(), loadUsers(), loadRuns(), loadStats()])
       .catch(console.error);
+  /* API Access Logic */
+    async function loadApiKey() {
+      try {
+        const res = await api('get-api-key');
+        const display = document.getElementById('api-key-display');
+        const example = document.getElementById('example-key');
+        if (res.api_key) {
+          display.dataset.fullKey = res.api_key; // Store full key
+          display.value = '********************************'; // Masked default
+          if(example) example.textContent = res.api_key;
+        } else {
+          display.value = '';
+          display.dataset.fullKey = '';
+          if(example) example.textContent = 'YOUR_KEY_HERE';
+        }
+      } catch (e) {
+        console.error("Failed to load API Key", e);
+      }
+    }
+
+    async function generateApiKey() {
+      if (!confirm("Are you sure? This will invalidate any existing API key immediately.")) return;
+      try {
+        const res = await api('generate-api-key');
+        if (res.api_key) {
+          const display = document.getElementById('api-key-display');
+          const example = document.getElementById('example-key');
+          display.dataset.fullKey = res.api_key;
+          display.value = res.api_key; // Show it initially
+          if(example) example.textContent = res.api_key;
+          alert("New API Key generated successfully!");
+        }
+      } catch (e) {
+        alert("Error generating key: " + e.message);
+      }
+    }
+
+    function toggleApiKeyVisibility() {
+      const display = document.getElementById('api-key-display');
+      const btn = document.getElementById('btn-show-key');
+      const full = display.dataset.fullKey || '';
+      
+      if (!full) return;
+
+      if (display.value.includes('*')) {
+        display.value = full;
+        btn.textContent = 'Hide';
+      } else {
+        display.value = '********************************';
+        btn.textContent = 'Show';
+      }
+    }
+
+    function copyApiKey() {
+      const display = document.getElementById('api-key-display');
+      const full = display.dataset.fullKey || '';
+      if (!full) {
+        alert("No key to copy!");
+        return;
+      }
+      navigator.clipboard.writeText(full).then(() => {
+        alert("API Key copied to clipboard!");
+      });
+    }
+
+    // Bind Tab Click
+    const apiTabBtn = document.querySelector('.tab-btn[data-tab="api"]');
+    if(apiTabBtn) apiTabBtn.addEventListener('click', loadApiKey);
   </script>
 </body>
 

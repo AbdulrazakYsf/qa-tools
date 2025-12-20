@@ -145,6 +145,15 @@ function get_db_auth()
     } catch (Exception $e) {
     }
 
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'api_key'")->fetchAll();
+        if (count($cols) == 0) {
+            $pdo->exec("ALTER TABLE qa_users ADD COLUMN api_key VARCHAR(64) DEFAULT NULL UNIQUE AFTER password_hash");
+            $pdo->exec("CREATE INDEX idx_user_api_key ON qa_users(api_key)");
+        }
+    } catch (Exception $e) {
+    }
+
     return $pdo;
 }
 
