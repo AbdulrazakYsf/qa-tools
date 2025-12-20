@@ -6,10 +6,10 @@
 
 require_once 'tool_runners.php';
 
-// Response headers
+// Define the headers for the API response.
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST');
 header('Access-Control-Allow-Headers: Authorization, Content-Type');
 
 // Handle Options

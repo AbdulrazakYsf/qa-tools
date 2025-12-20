@@ -62,6 +62,15 @@ const QA_DB_PASS = 'your-password';
 3. Click "Run All Tests"
 4. The system will execute each tool sequentially and save results
 
+### ⚠️ Important Note on Free Hosting (InfinityFree / ByetHost)
+If you are hosting this on **InfinityFree**, **ByetHost**, or similar free hosting providers, the **Public API (`api.php`) will not work**.
+These providers inject a rigorous **JavaScript Bot Protection** (AES challenge) on every request, which non-browser clients (like `curl`, Postman, or automated scripts) cannot bypass.
+
+**Solution**: To use the API features, you must host this application on:
+- A local server (XAMPP/Laragon)
+- A VPS (DigitalOcean, Linode, AWS)
+- A standard paid shared hosting plan (Namecheap, Bluehost, etc.) that allows direct API access.
+
 ### Creating Configurations
 
 1. Go to the "Configurations" tab
