@@ -2640,47 +2640,47 @@ $TOOL_DEFS = [
   <!-- RUN SUMMARY MODAL -->
   <div class="modal-overlay" id="run-summary-modal">
     <div class="modal-card"
-      style="max-width:400px; width:100%; border-radius:12px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.2);">
-      <div class="modal-header" style="background:#f8f9fa; border-bottom:1px solid #eee; padding:12px 20px;">
-        <h3 id="summary-title" style="margin:0; font-size:18px; color:#333;">Run Complete</h3>
+      style="max-width:350px; width:100%; height:auto; border-radius:12px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.2);">
+      <div class="modal-header" style="background:#f8f9fa; border-bottom:1px solid #eee; padding:10px 16px;">
+        <h3 id="summary-title" style="margin:0; font-size:16px; color:#333;">Run Complete</h3>
         <button class="btn-ghost" onclick="closeSummaryModal()"
-          style="font-size:24px; padding:0; width:30px; height:30px; line-height:30px; border:none;">&times;</button>
+          style="font-size:20px; padding:0; width:24px; height:24px; line-height:24px; border:none;">&times;</button>
       </div>
-      <div class="modal-body" style="padding:24px 20px;">
+      <div class="modal-body" style="padding:16px;">
 
         <!-- Icon -->
-        <div style="text-align:center; margin-bottom:20px;">
-          <div id="summary-icon" style="font-size:42px;"></div>
+        <div style="text-align:center; margin-bottom:12px;">
+          <div id="summary-icon" style="font-size:36px;"></div>
         </div>
 
         <!-- Stats Grid (2x2) -->
-        <div class="stat-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:20px;">
-          <div class="stat-card" style="background:#f5f7fa; padding:12px; border-radius:8px; text-align:center;">
-            <div class="stat-value" id="sum-total" style="font-size:20px; font-weight:bold; color:#333;">0</div>
-            <div class="stat-label" style="font-size:12px; color:#666; text-transform:uppercase; letter-spacing:0.5px;">
+        <div class="stat-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:16px;">
+          <div class="stat-card" style="background:#f5f7fa; padding:8px; border-radius:8px; text-align:center;">
+            <div class="stat-value" id="sum-total" style="font-size:16px; font-weight:bold; color:#333;">0</div>
+            <div class="stat-label" style="font-size:10px; color:#666; text-transform:uppercase; letter-spacing:0.5px;">
               Total</div>
           </div>
-          <div class="stat-card" style="background:#e8f5e9; padding:12px; border-radius:8px; text-align:center;">
-            <div class="stat-value" id="sum-passed" style="font-size:20px; font-weight:bold; color:#2e7d32;">0</div>
+          <div class="stat-card" style="background:#e8f5e9; padding:8px; border-radius:8px; text-align:center;">
+            <div class="stat-value" id="sum-passed" style="font-size:16px; font-weight:bold; color:#2e7d32;">0</div>
             <div class="stat-label"
-              style="font-size:12px; color:#1b5e20; text-transform:uppercase; letter-spacing:0.5px;">Passed</div>
+              style="font-size:10px; color:#1b5e20; text-transform:uppercase; letter-spacing:0.5px;">Passed</div>
           </div>
-          <div class="stat-card" style="background:#ffebee; padding:12px; border-radius:8px; text-align:center;">
-            <div class="stat-value" id="sum-failed" style="font-size:20px; font-weight:bold; color:#c62828;">0</div>
+          <div class="stat-card" style="background:#ffebee; padding:8px; border-radius:8px; text-align:center;">
+            <div class="stat-value" id="sum-failed" style="font-size:16px; font-weight:bold; color:#c62828;">0</div>
             <div class="stat-label"
-              style="font-size:12px; color:#b71c1c; text-transform:uppercase; letter-spacing:0.5px;">Failed</div>
+              style="font-size:10px; color:#b71c1c; text-transform:uppercase; letter-spacing:0.5px;">Failed</div>
           </div>
-          <div class="stat-card" style="background:#fff3e0; padding:12px; border-radius:8px; text-align:center;">
-            <div class="stat-value" id="sum-open" style="font-size:20px; font-weight:bold; color:#ef6c00;">0</div>
+          <div class="stat-card" style="background:#fff3e0; padding:8px; border-radius:8px; text-align:center;">
+            <div class="stat-value" id="sum-open" style="font-size:16px; font-weight:bold; color:#ef6c00;">0</div>
             <div class="stat-label"
-              style="font-size:12px; color:#e65100; text-transform:uppercase; letter-spacing:0.5px;">Open Issues</div>
+              style="font-size:10px; color:#e65100; text-transform:uppercase; letter-spacing:0.5px;">Open Issues</div>
           </div>
         </div>
 
         <!-- Action -->
         <div style="text-align:center;">
           <button class="btn-primary" onclick="closeSummaryModal()"
-            style="width:100%; border-radius:6px; padding:10px;">Close Summary</button>
+            style="width:100%; border-radius:6px; padding:8px; font-size:13px;">Close Summary</button>
         </div>
       </div>
     </div>
