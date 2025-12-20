@@ -742,6 +742,7 @@ if (isset($_GET['api'])) {
 
       /* --- API Access --- */
       case 'get-api-key':
+        require_role(['admin']);
         // Retrieve current key
         $userId = $currentUser['id'];
         $db = qa_db();
@@ -752,6 +753,7 @@ if (isset($_GET['api'])) {
         break;
 
       case 'generate-api-key':
+        require_role(['admin']);
         // Generate new random key
         $userId = $currentUser['id'];
         $newKey = bin2hex(random_bytes(32)); // 64 chars
@@ -889,6 +891,15 @@ function qa_db(): PDO
     $cols = $pdo->query("SHOW COLUMNS FROM qa_support_messages LIKE 'is_read'")->fetchAll();
     if (count($cols) == 0)
       $pdo->exec("ALTER TABLE qa_support_messages ADD COLUMN is_read TINYINT(1) NOT NULL DEFAULT 0 AFTER message");
+  } catch (Exception $e) {
+  }
+
+  try {
+    $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'api_key'")->fetchAll();
+    if (count($cols) == 0) {
+      $pdo->exec("ALTER TABLE qa_users ADD COLUMN api_key VARCHAR(64) DEFAULT NULL UNIQUE AFTER password_hash");
+      $pdo->exec("CREATE INDEX idx_user_api_key ON qa_users(api_key)");
+    }
   } catch (Exception $e) {
   }
 
@@ -2137,7 +2148,9 @@ $TOOL_DEFS = [
       <button class="tab-btn" data-tab="configs">Configurations</button>
       <button class="tab-btn" data-tab="users">Users</button>
       <button class="tab-btn" data-tab="support">Support Center</button>
-      <button class="tab-btn" data-tab="api">API Access</button>
+      <?php if ($currentUser['role'] === 'admin'): ?>
+            <button class="tab-btn" data-tab="api">API Access</button>
+      <?php endif; ?>
     </div>
 
     <!-- DASHBOARD TAB -->
@@ -2368,9 +2381,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                  </option>
+                      <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                        <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                      </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -4415,7 +4428,7 @@ $TOOL_DEFS = [
     /* Initial */
     Promise.all([loadConfigs(), loadUsers(), loadRuns(), loadStats()])
       .catch(console.error);
-  /* API Access Logic */
+    /* API Access Logic */
     async function loadApiKey() {
       try {
         const res = await api('get-api-key');
@@ -4424,11 +4437,11 @@ $TOOL_DEFS = [
         if (res.api_key) {
           display.dataset.fullKey = res.api_key; // Store full key
           display.value = '********************************'; // Masked default
-          if(example) example.textContent = res.api_key;
+          if (example) example.textContent = res.api_key;
         } else {
           display.value = '';
           display.dataset.fullKey = '';
-          if(example) example.textContent = 'YOUR_KEY_HERE';
+          if (example) example.textContent = 'YOUR_KEY_HERE';
         }
       } catch (e) {
         console.error("Failed to load API Key", e);
@@ -4444,7 +4457,7 @@ $TOOL_DEFS = [
           const example = document.getElementById('example-key');
           display.dataset.fullKey = res.api_key;
           display.value = res.api_key; // Show it initially
-          if(example) example.textContent = res.api_key;
+          if (example) example.textContent = res.api_key;
           alert("New API Key generated successfully!");
         }
       } catch (e) {
@@ -4456,7 +4469,7 @@ $TOOL_DEFS = [
       const display = document.getElementById('api-key-display');
       const btn = document.getElementById('btn-show-key');
       const full = display.dataset.fullKey || '';
-      
+
       if (!full) return;
 
       if (display.value.includes('*')) {
@@ -4482,7 +4495,7 @@ $TOOL_DEFS = [
 
     // Bind Tab Click
     const apiTabBtn = document.querySelector('.tab-btn[data-tab="api"]');
-    if(apiTabBtn) apiTabBtn.addEventListener('click', loadApiKey);
+    if (apiTabBtn) apiTabBtn.addEventListener('click', loadApiKey);
   </script>
 </body>
 
