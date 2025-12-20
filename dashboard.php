@@ -486,9 +486,10 @@ if (isset($_GET['api'])) {
 
         $inputData = $input['input_data'] ?? null;
         $outputData = $input['output_data'] ?? null;
+        $duration = $input['duration_seconds'] ?? 0;
 
-        $stmt = $db->prepare("INSERT INTO qa_test_runs (user_id, status, total_tests, passed, failed, open_issues, notes, input_data, output_data) VALUES (?,?,?,?,?,?,?,?,?)");
-        $stmt->execute([$userId, $status, $total, $passed, $failed, $open, $notes, $inputData, $outputData]);
+        $stmt = $db->prepare("INSERT INTO qa_test_runs (user_id, status, total_tests, passed, failed, open_issues, notes, input_data, output_data, duration) VALUES (?,?,?,?,?,?,?,?,?,?)");
+        $stmt->execute([$userId, $status, $total, $passed, $failed, $open, $notes, $inputData, $outputData, $duration]);
         $runId = $db->lastInsertId();
 
         if ($runId && !empty($results)) {
@@ -2267,6 +2268,7 @@ $TOOL_DEFS = [
               <th width="40">#</th>
               <th>Date</th>
               <th>User</th>
+              <th>Duration</th>
               <th width="80">Status</th>
               <th>Total</th>
               <th>Passed</th>
@@ -3083,6 +3085,9 @@ $TOOL_DEFS = [
       const btn = document.getElementById('btn-run-all');
       btn.disabled = true;
 
+      btn.disabled = true;
+      const startTime = Date.now();
+
       let totalTests = 0, totalPassed = 0, totalFailed = 0, totalOpen = 0;
       const allDetails = [];
 
@@ -3137,15 +3142,15 @@ $TOOL_DEFS = [
 
         try {
           if (cfg) {
-             const parsed = JSON.parse(cfg.config_json || '{}');
-             const inp = parsed.inputs || '(none)';
-             logToConsole(`Inputs for ${code}:\n${inp}`, 'info');
-             allInputs[code] = inp;
-           }
-           logToConsole(`Running ${code}...`, 'info');
-           const result = await runToolWithConfig(code, cfg);
-           allFullResults[code] = result;
-           totalTests += result.tests || 0;
+            const parsed = JSON.parse(cfg.config_json || '{}');
+            const inp = parsed.inputs || '(none)';
+            logToConsole(`Inputs for ${code}:\n${inp}`, 'info');
+            allInputs[code] = inp;
+          }
+          logToConsole(`Running ${code}...`, 'info');
+          const result = await runToolWithConfig(code, cfg);
+          allFullResults[code] = result;
+          totalTests += result.tests || 0;
           totalPassed += result.passed || 0;
           totalFailed += result.failed || 0;
           totalOpen += result.open || 0;
@@ -3202,8 +3207,12 @@ $TOOL_DEFS = [
           }
         });
 
+        const endTime = Date.now();
+        const durationSeconds = Math.round((endTime - startTime) / 1000);
+
         await api('save-run', {
           status: status,
+          duration_seconds: durationSeconds,
           input_data: JSON.stringify(allInputs),
           output_data: JSON.stringify(allFullResults),
           total_tests: totalTests,
@@ -3278,6 +3287,7 @@ $TOOL_DEFS = [
         <div style="margin-top:2px;">${toolBadges}</div>
       </td>
       <td>${userHtml}</td>
+      <tdstyle="font-family:monospace; font-size:12px;">${r.duration ? r.duration + 's' : '-'}</td>
       <td><span class="badge badge-${r.status === 'passed' ? 'pass' : 'fail'}">${r.status}</span></td>
       <td>${r.total_tests}</td>
       <td>${r.passed}</td>

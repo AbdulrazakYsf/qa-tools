@@ -107,6 +107,13 @@ function get_db_auth()
     } catch (Exception $e) {
     }
 
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM qa_test_runs LIKE 'duration'")->fetchAll();
+        if (count($cols) == 0)
+            $pdo->exec("ALTER TABLE qa_test_runs ADD COLUMN duration INT DEFAULT 0");
+    } catch (Exception $e) {
+    }
+
     // Ensure qa_tool_configs table exists
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS qa_tool_configs (
