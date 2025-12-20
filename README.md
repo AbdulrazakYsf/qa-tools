@@ -131,6 +131,13 @@ If tests are taking too long:
 2. Ensure the database user has CREATE TABLE permissions
 3. Check that the database server is accessible
 
+## AWS Integration & Migration
+
+If you wish to use the Public API (`api.php`) via tools like Postman or programmatically, you must bypass the free hosting security checks.
+
+- **[AWS Setup Guide](docs/aws_setup_guide.md)**: Instructions for setting up an AWS API Gateway proxy.
+- **[AWS Migration Guide](docs/aws_migration_guide.md)**: Step-by-step guide to migrate the entire application to AWS Lightsail (Recommended).
+
 ## API Endpoints
 
 The dashboard provides these internal API endpoints:
