@@ -6,6 +6,12 @@ require_once 'tool_runners.php';
 require_login();
 $currentUser = current_user();
 
+const QA_DB_HOST = 'sql309.infinityfree.com';
+const QA_DB_PORT = 3306;
+const QA_DB_NAME = 'if0_40372489_init_db';
+const QA_DB_USER = 'if0_40372489';
+const QA_DB_PASS = 'KmUb1Azwzo';
+
 /********************
  * 1. API HANDLING (Must be before any HTML)
  ********************/
@@ -803,12 +809,6 @@ if (is_dir($toolsDir)) {
 /*********************************
  * 1. DATABASE (MySQL, auto-init)
  *********************************/
-
-const QA_DB_HOST = 'sql309.infinityfree.com';
-const QA_DB_PORT = 3306;
-const QA_DB_NAME = 'if0_40372489_init_db';
-const QA_DB_USER = 'if0_40372489';
-const QA_DB_PASS = 'KmUb1Azwzo';
 
 function qa_db(): PDO
 {
@@ -2161,7 +2161,7 @@ $TOOL_DEFS = [
       <button class="tab-btn" data-tab="users">Users</button>
       <button class="tab-btn" data-tab="support">Support Center</button>
       <?php if ($currentUser['role'] === 'admin'): ?>
-        <button class="tab-btn" data-tab="api">API Access</button>
+          <button class="tab-btn" data-tab="api">API Access</button>
       <?php endif; ?>
     </div>
 
@@ -2393,9 +2393,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                  </option>
+                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                    </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -2884,9 +2884,9 @@ $TOOL_DEFS = [
       if (!res.ok) {
         let msg = 'API ' + action + ' failed';
         try {
-            const errJson = await res.json();
-            if (errJson.error) msg = errJson.error;
-        } catch (e) {}
+          const errJson = await res.json();
+          if (errJson.error) msg = errJson.error;
+        } catch (e) { }
         throw new Error(msg);
       }
       return res.json();
