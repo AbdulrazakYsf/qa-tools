@@ -753,14 +753,26 @@ if (isset($_GET['api'])) {
         break;
 
       case 'generate-api-key':
-        require_role(['admin']);
-        // Generate new random key
-        $userId = $currentUser['id'];
-        $newKey = bin2hex(random_bytes(32)); // 64 chars
-        $db = qa_db();
-        $stmt = $db->prepare("UPDATE qa_users SET api_key = ? WHERE id = ?");
-        $stmt->execute([$newKey, $userId]);
-        echo json_encode(['api_key' => $newKey]);
+        try {
+          require_role(['admin']);
+          // Generate new random key
+          $userId = $currentUser['id'];
+          $newKey = bin2hex(random_bytes(32));
+          $db = qa_db();
+
+          // Debug Log
+          error_log("Generating API Key for User $userId");
+
+          $stmt = $db->prepare("UPDATE qa_users SET api_key = ? WHERE id = ?");
+          if (!$stmt->execute([$newKey, $userId])) {
+            throw new Exception("Failed to update API key in DB: " . implode(" ", $stmt->errorInfo()));
+          }
+          echo json_encode(['api_key' => $newKey]);
+        } catch (Throwable $e) {
+          http_response_code(500);
+          error_log("API Key Gen Error: " . $e->getMessage());
+          echo json_encode(['error' => $e->getMessage()]);
+        }
         break;
 
       default:
@@ -2149,7 +2161,7 @@ $TOOL_DEFS = [
       <button class="tab-btn" data-tab="users">Users</button>
       <button class="tab-btn" data-tab="support">Support Center</button>
       <?php if ($currentUser['role'] === 'admin'): ?>
-            <button class="tab-btn" data-tab="api">API Access</button>
+        <button class="tab-btn" data-tab="api">API Access</button>
       <?php endif; ?>
     </div>
 
@@ -2381,9 +2393,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                      <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                        <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                      </option>
+                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                  </option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -2869,7 +2881,14 @@ $TOOL_DEFS = [
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload || {})
       });
-      if (!res.ok) throw new Error('API ' + action + ' failed');
+      if (!res.ok) {
+        let msg = 'API ' + action + ' failed';
+        try {
+            const errJson = await res.json();
+            if (errJson.error) msg = errJson.error;
+        } catch (e) {}
+        throw new Error(msg);
+      }
       return res.json();
     }
 
