@@ -218,8 +218,9 @@ class ToolRunner
         $found = [];
 
         foreach ($items as $obj) {
-            if (!isset($obj['item']) || !is_string($obj['item'])) continue;
-            
+            if (!isset($obj['item']) || !is_string($obj['item']))
+                continue;
+
             $entries = explode('||', $obj['item']);
             foreach ($entries as $entry) {
                 // entry format: type,key,value... e.g. "type,brand,Samsung"
@@ -235,7 +236,9 @@ class ToolRunner
     /* ---------- 3. CMS Block Checker ---------- */
     public static function run_cms($input)
     {
-        $parents = $input['parents'] ?? [];
+        $parents = $input['parents'] ?? ($input['urls'] ?? []);
+        if (is_string($parents))
+            $parents = [$parents];
         $results = [];
 
         foreach ($parents as $parentUrl) {
@@ -709,7 +712,7 @@ class ToolRunner
     {
         $content = $input['content'] ?? '';
         $isUrl = preg_match('/^https?:\/\//', $content);
-        
+
         $jsonStr = $content;
         $fetched = false;
         $error = null;
@@ -751,8 +754,11 @@ class ToolRunner
             if (!$res['ok']) {
                 $results[] = [
                     'url' => $url,
-                     'error' => $res['error'],
-                     'imgs' => 0, 'scripts' => 0, 'css' => 0, 'sizeKB' => 0
+                    'error' => $res['error'],
+                    'imgs' => 0,
+                    'scripts' => 0,
+                    'css' => 0,
+                    'sizeKB' => 0
                 ];
                 continue;
             }
@@ -760,7 +766,7 @@ class ToolRunner
             // Simple regex match
             $imgs = preg_match_all('/<img\s/i', $html);
             $scripts = preg_match_all('/<script/i', $html);
-            $css = preg_match_all('/<link\s[^>]*rel=["\']stylesheet["\']/i', $html); 
+            $css = preg_match_all('/<link\s[^>]*rel=["\']stylesheet["\']/i', $html);
             $sizeKB = round(strlen($html) / 1024);
 
             $results[] = [
@@ -782,10 +788,11 @@ class ToolRunner
 
         foreach ($urls as $parent) {
             $res = self::request('GET', $parent);
-            if (!$res['ok']) continue;
+            if (!$res['ok'])
+                continue;
 
             $imgs = self::extract_images_from_cms($res['data']);
-            
+
             foreach ($imgs as $imgUrl) {
                 // Check image
                 $check = self::request('GET', $imgUrl);
@@ -861,30 +868,34 @@ class ToolRunner
 
         foreach ($urls as $parent) {
             $res = self::request('GET', $parent);
-            if (!$res['ok']) continue;
+            if (!$res['ok'])
+                continue;
 
             $codes = [];
             $data = $res['data']['data'] ?? [];
             if (is_array($data)) {
-                 foreach ($data as $o) {
-                    if (!empty($o['category_code'])) $codes[] = $o['category_code'];
-                 }
+                foreach ($data as $o) {
+                    if (!empty($o['category_code']))
+                        $codes[] = $o['category_code'];
+                }
             }
 
             $parts = explode('/', $parent);
-            if (count($parts) < 6) continue;
+            if (count($parts) < 6)
+                continue;
             $basePrefix = implode('/', array_slice($parts, 0, 5)) . '/';
             $store = $parts[5];
 
             foreach ($codes as $c) {
                 $link = "{$basePrefix}{$store}/cmspage/page-v2/{$c}";
-                
+
                 $check = self::request('GET', $link);
                 $status = 'Warning';
                 if ($check['ok']) {
-                     $d = $check['data'];
-                     $items = $d['data']['cms_items']['items'] ?? [];
-                     if (!empty($items)) $status = 'OK';
+                    $d = $check['data'];
+                    $items = $d['data']['cms_items']['items'] ?? [];
+                    if (!empty($items))
+                        $status = 'OK';
                 }
 
                 $results[] = ['link' => $link, 'status' => $status, 'parent' => $parent];
@@ -901,22 +912,25 @@ class ToolRunner
 
         foreach ($urls as $parentUrl) {
             $res = self::request('GET', $parentUrl);
-            if (!$res['ok']) continue;
-            
+            if (!$res['ok'])
+                continue;
+
             $data = $res['data']['data'] ?? [];
-            if (!is_array($data)) continue;
+            if (!is_array($data))
+                continue;
 
             $flat = [];
             foreach ($data as $o) {
-                if (empty($o['id'])) continue;
+                if (empty($o['id']))
+                    continue;
                 $children = $o['children_data'] ?? [];
                 foreach ($children as $ch) {
-                     $flat[] = [
-                         'id' => $ch['id'],
-                         'parent_id' => $o['id'],
-                         'parent_name' => $o['name'] ?? '',
-                         'child_name' => $ch['name'] ?? ''
-                     ];
+                    $flat[] = [
+                        'id' => $ch['id'],
+                        'parent_id' => $o['id'],
+                        'parent_name' => $o['name'] ?? '',
+                        'child_name' => $ch['name'] ?? ''
+                    ];
                 }
             }
 
@@ -928,12 +942,13 @@ class ToolRunner
             foreach ($flat as $item) {
                 $link = $catBase . $item['id'];
                 $pUrl = $catBase . $item['parent_id'];
-                
+
                 $check = self::request('GET', $link);
                 $ok = false;
                 if ($check['ok']) {
                     $hits = $check['data']['hits']['hits'] ?? ($check['data']['data']['hits']['hits'] ?? []);
-                    if (count($hits) > 0) $ok = true;
+                    if (count($hits) > 0)
+                        $ok = true;
                 }
 
                 $results[] = [
@@ -956,7 +971,8 @@ class ToolRunner
 
         foreach ($urls as $parent) {
             $res = self::request('GET', $parent);
-            if (!$res['ok']) continue;
+            if (!$res['ok'])
+                continue;
 
             $title = $res['data']['data']['cms_items']['title'] ?? 'N/A';
             $parts = explode('/', $parent);
@@ -964,12 +980,12 @@ class ToolRunner
             $store = str_replace('_', '-', $parts[5] ?? 'sa-en');
 
             $items = self::parse_filtered_items($res['data']);
-            
+
             // Build URLs
             foreach ($items as $item) {
                 $catId = $item['catId'];
                 $filters = $item['filters'];
-                
+
                 $url = "{$baseUrl1}catalogv2/product/store/{$store}/category_ids/{$catId}";
                 foreach ($filters as $k => $vals) {
                     if ($k === 'sort') {
@@ -985,7 +1001,8 @@ class ToolRunner
                     // Copy logic
                     $processed = $vals;
                     if ($k === 'price' || $k === 'jb_discount_percentage') {
-                        $processed = array_map(function($v){ return str_replace('-', ',', $v); }, $processed);
+                        $processed = array_map(function ($v) {
+                            return str_replace('-', ',', $v); }, $processed);
                     }
                     $joined = implode(',', $processed);
                     $url .= "/{$k}/{$joined}";
@@ -999,8 +1016,9 @@ class ToolRunner
                 $check = self::request('GET', $url);
                 $ok = false;
                 if ($check['ok']) {
-                     $hits = $check['data']['hits']['hits'] ?? ($check['data']['data']['hits']['hits'] ?? []);
-                     if (count($hits) > 0) $ok = true;
+                    $hits = $check['data']['hits']['hits'] ?? ($check['data']['data']['hits']['hits'] ?? []);
+                    if (count($hits) > 0)
+                        $ok = true;
                 }
 
                 $results[] = [
@@ -1020,19 +1038,20 @@ class ToolRunner
         $out = [];
         foreach ($list as $obj) {
             $itemStr = $obj['item'] ?? '';
-            
+
             // 1. Classic Pattern: split || -> split , -> check [1]=='filtered'
             $segments = explode('||', $itemStr);
             foreach ($segments as $str) {
                 $p = explode(',', $str);
-                if (($p[1]??'') === 'filtered') {
+                if (($p[1] ?? '') === 'filtered') {
                     $catId = $p[2] ?? '';
                     $rest = array_slice($p, 3);
                     $filters = [];
                     for ($i = 0; $i < count($rest); $i += 2) {
                         $k = $rest[$i];
-                        $v = $rest[$i+1] ?? null;
-                        if (!$k || $v === null) continue;
+                        $v = $rest[$i + 1] ?? null;
+                        if (!$k || $v === null)
+                            continue;
                         $filters[$k][] = $v;
                     }
                     $out[] = ['catId' => $catId, 'filters' => $filters];
@@ -1041,15 +1060,16 @@ class ToolRunner
 
             // 2. New Collection Style: split || -> find 'filtered' token -> next token is CSV
             foreach ($segments as $idx => $s) {
-                if ($s === 'filtered' && isset($segments[$idx+1])) {
-                    $parts = explode(',', $segments[$idx+1]);
+                if ($s === 'filtered' && isset($segments[$idx + 1])) {
+                    $parts = explode(',', $segments[$idx + 1]);
                     $catId = $parts[0];
                     $rest = array_slice($parts, 1);
-                     $filters = [];
+                    $filters = [];
                     for ($i = 0; $i < count($rest); $i += 2) {
                         $k = $rest[$i];
-                        $v = $rest[$i+1] ?? null;
-                        if (!$k || $v === null) continue;
+                        $v = $rest[$i + 1] ?? null;
+                        if (!$k || $v === null)
+                            continue;
                         $filters[$k][] = $v;
                     }
                     $out[] = ['catId' => $catId, 'filters' => $filters];
