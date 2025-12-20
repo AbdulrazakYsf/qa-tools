@@ -85,13 +85,14 @@ try {
             ];
         } else {
             // Aggregation Calculation
-            $agg = ['total_tests' => 0, 'passed' => 0, 'failed' => 0, 'open_issues' => 0];
+            $agg = ['total_tests' => 0, 'passed' => 0, 'failed' => 0, 'open_issues' => 0, 'duration' => 0];
             $runIds = [];
             foreach ($runs as $r) {
                 $agg['total_tests'] += $r['total_tests'];
                 $agg['passed'] += $r['passed'];
                 $agg['failed'] += $r['failed'];
                 $agg['open_issues'] += $r['open_issues'];
+                $agg['duration'] += ($r['duration'] ?? 0);
                 $runIds[] = $r['id'];
             }
             $run = array_merge($agg, [
@@ -182,7 +183,7 @@ $passRate = $totalTests > 0 ? round(($run['passed'] / $totalTests) * 100, 1) : 0
         }
 
         .report {
-            max-width: 1000px;
+            max-width: 95%;
             margin: 0 auto;
             background: var(--card);
             border-radius: 12px;
@@ -583,9 +584,15 @@ $passRate = $totalTests > 0 ? round(($run['passed'] / $totalTests) * 100, 1) : 0
                     <h3>Failed</h3>
                     <div class="value"><?php echo $run['failed']; ?></div>
                 </div>
-                <div class="summary-card open">
-                    <h3>Open Issues</h3>
-                    <div class="value"><?php echo $run['open_issues']; ?></div>
+                <div class="summary-card warn">
+                    <h3>Duration</h3>
+                    <div class="value">
+                        <?php
+                        $d = $run['duration'] ?? 0;
+                        if ($d < 60) echo $d . 's';
+                        else echo floor($d / 60) . 'm ' . ($d % 60) . 's';
+                        ?>
+                    </div>
                 </div>
                 <div class="summary-card rate">
                     <h3>Pass Rate</h3>

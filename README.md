@@ -158,6 +158,7 @@ Internal use only - Jarir.com QA Team
 
 ## Version History
 
+- **v2.3.2** - Stable Release: UI Polish, Report Enhancements (Duration Tracking).
 - **v2.3.1** - Stable Release: Pass Rate Fixes, Login Tool Fixes, and Data Persistence (Input/Output logs).
 - **v2.3.0** - Stable Release: Server-Side Tool Migration (except Images) & Stability Fixes.
 - **v2.2.0** - Beta: Initial migration of tools to server-side API.
