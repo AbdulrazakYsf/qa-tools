@@ -182,6 +182,8 @@ class ToolRunner
             $brands = self::extract_brands_from_cms($res['data']);
             $uniqueBrands = array_unique($brands);
 
+
+
             // Construct Links
             // Logic: split /api/, get store from 5th part...
             // Ex: https://www.jarir.com/api/v2/sa_en/cmspage/page-v2/123
