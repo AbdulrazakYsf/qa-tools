@@ -51,26 +51,42 @@ try {
     }
 
     // 2. Parse Input
+    $inputData = [];
+    $toolCode = null;
+
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        $input = [
-            'tool' => $_GET['tool'] ?? null,
-            'input' => $_GET
-        ];
-        // Remove 'tool' and 'api_key' from input data to keep it clean
-        unset($input['input']['tool']);
-        unset($input['input']['api_key']);
+        $toolCode = $_GET['tool'] ?? null;
+        $inputData = $_GET;
+        // Clean up
+        unset($inputData['tool']);
+        unset($inputData['api_key']);
     } else {
-        $input = json_decode(file_get_contents('php://input'), true);
+        // POST / PUT
+        $rawJson = file_get_contents('php://input');
+        $json = json_decode($rawJson, true) ?? [];
+
+        // Determine Tool: Logic = JSON['tool'] -> Query['tool']
+        $toolCode = $json['tool'] ?? ($_GET['tool'] ?? null);
+
+        // Determine Data
+        // Backward compatibility: if 'input' key exists, use it.
+        // Otherwise, use the whole body (minus reserved keys).
+        if (isset($json['input']) && is_array($json['input'])) {
+            $inputData = $json['input'];
+        } else {
+            $inputData = $json;
+            unset($inputData['tool']);
+            unset($inputData['api_key']);
+        }
     }
 
-    if (!$input || !isset($input['tool'])) {
+    if (!$toolCode) {
         http_response_code(400);
-        echo json_encode(['error' => 'Invalid Request. "tool" parameter is required.']);
+        echo json_encode(['error' => 'Invalid Request. "tool" parameter is required (in URL or JSON body).']);
         exit;
     }
 
-    $toolCode = $input['tool'];
-    $data = $input['input'] ?? [];
+    $data = $inputData;
 
     // 3. Routing
     // Map tool codes to ToolRunner methods

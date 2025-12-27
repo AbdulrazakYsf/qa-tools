@@ -1,0 +1,40 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy files via SCP
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_KEY }}
+          port: ${{ secrets.AWS_PORT || '22' }}
+          source: "."
+          target: "/home/ubuntu/QA-TOOLS"
+          rm: true
+
+      - name: Deploy to Web Root
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_KEY }}
+          port: ${{ secrets.AWS_PORT || '22' }}
+          script: |
+            # Move files from home dir to web root, excluding auth_session.php
+            # We use rsync for safer syncing with exclusions
+            sudo rsync -av --exclude 'auth_session.php' --exclude '.git' --exclude '.github' /home/ubuntu/QA-TOOLS/ /var/www/html/
+            
+            # Ensure correct permissions
+            sudo chown -R www-data:www-data /var/www/html/
+            sudo chmod -R 755 /var/www/html/
