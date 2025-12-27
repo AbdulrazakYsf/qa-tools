@@ -18,10 +18,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// 1. Authentication
+// 1. Parse Request Body & Headers Early
+$rawInput = file_get_contents('php://input');
+$jsonInput = json_decode($rawInput, true) ?? [];
+
+// 2. Authentication
 $apiKey = '';
 
-// Try Header: "Authorization: Bearer <KEY>"
+// Priority 1: Authorization Header
 $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
 
 // Fallback for Apache/CGI where $_SERVER['HTTP_AUTHORIZATION'] might be stripped
@@ -38,14 +42,19 @@ if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
     $apiKey = $matches[1];
 }
 
-// Try Query Param: "?api_key=<KEY>"
+// Priority 2: Body Parameter "api_key"
+if (!$apiKey && isset($jsonInput['api_key'])) {
+    $apiKey = $jsonInput['api_key'];
+}
+
+// Priority 3: Query Parameter "api_key"
 if (!$apiKey && isset($_GET['api_key'])) {
     $apiKey = $_GET['api_key'];
 }
 
 if (!$apiKey) {
     http_response_code(401);
-    echo json_encode(['error' => 'Missing API Key. Provide "Authorization: Bearer <key>" header or "?api_key=<key>" query param.']);
+    echo json_encode(['error' => 'Missing API Key. Provide "Authorization: Bearer <key>" header or "api_key" in query/body.']);
     exit;
 }
 
@@ -61,7 +70,7 @@ try {
         exit;
     }
 
-    // 2. Parse Input
+    // 3. Prepare Input Data
     $inputData = [];
     $toolCode = null;
 
@@ -72,20 +81,14 @@ try {
         unset($inputData['tool']);
         unset($inputData['api_key']);
     } else {
-        // POST / PUT
-        $rawJson = file_get_contents('php://input');
-        $json = json_decode($rawJson, true) ?? [];
+        // Use the pre-parsed JSON
+        $toolCode = $jsonInput['tool'] ?? ($_GET['tool'] ?? null);
 
-        // Determine Tool: Logic = JSON['tool'] -> Query['tool']
-        $toolCode = $json['tool'] ?? ($_GET['tool'] ?? null);
-
-        // Determine Data
         // Backward compatibility: if 'input' key exists, use it.
-        // Otherwise, use the whole body (minus reserved keys).
-        if (isset($json['input']) && is_array($json['input'])) {
-            $inputData = $json['input'];
+        if (isset($jsonInput['input']) && is_array($jsonInput['input'])) {
+            $inputData = $jsonInput['input'];
         } else {
-            $inputData = $json;
+            $inputData = $jsonInput;
             unset($inputData['tool']);
             unset($inputData['api_key']);
         }
