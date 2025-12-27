@@ -41,10 +41,16 @@ A fully integrated ticketing system with **threaded messaging**:
 *   **UI**: Vanilla JS handles all interactivity (Modals, AJAX, Chart.js rendering).
 
 ## Deployment & Security
-*   **Host**: InfinityFree (LAMP Stack).
-*   **Deploy**: GitHub Actions via FTP.
-*   **Secrets**: `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD`.
+*   **Host**: AWS Lightsail (Ubuntu 24.04 LTS).
+*   **Stack**: LAMP (Linux, Apache, MySQL, PHP 8.x).
+*   **Deploy**: Automated via **GitHub Actions** (`.github/workflows/deploy_aws.yml`).
+    *   Uses **SSH/Rsync** to sync files.
+    *   Triggers on push to `main` branch.
+*   **Secrets Management**:
+    *   `AWS_HOST`, `AWS_USERNAME`, `AWS_KEY` (Private SSH Key), `AWS_PORT`.
 *   **Security**:
-    *   Passwords hashed via `password_hash()`.
-    *   Role-Based Access Control (Admin vs Tester vs Viewer).
-    *   All DB queries prepared to prevent SQL Injection.
+    *   **API Authentication**: API Key required (Bearer Token in Header OR `api_key` in Body).
+    *   **.htaccess**: Configured to pass Authorization headers through Apache.
+    *   **Database**: PDO with Prepared Statements (SQL Injection prevention).
+    *   **Passwords**: Hashed via `password_hash()`.
+    *   **Roles**: Strict Role-Based Access Control (Admin vs Tester).

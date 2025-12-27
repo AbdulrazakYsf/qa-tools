@@ -131,12 +131,17 @@ If tests are taking too long:
 2. Ensure the database user has CREATE TABLE permissions
 3. Check that the database server is accessible
 
-## AWS Integration & Migration
+## AWS Integration & Deployment
 
-If you wish to use the Public API (`api.php`) via tools like Postman or programmatically, you must bypass the free hosting security checks.
+The application is now fully optimized for AWS (Ubuntu/Lightsail).
 
-- **[AWS Setup Guide](docs/aws_setup_guide.md)**: Instructions for setting up an AWS API Gateway proxy.
-- **[AWS Migration Guide](docs/aws_migration_guide.md)**: Step-by-step guide to migrate the entire application to AWS Lightsail (Recommended).
+- **[AWS Integration Guide](docs/aws_integration_guide.md)**: **(New)** Comprehensive guide covering Server Setup, Database Migration, and Automated Deployment via GitHub Actions.
+- **[Manual LAMP Setup](docs/manual_lamp_setup_guide.md)**: Detailed commands for setting up the LAMP stack on a clean Ubuntu instance.
+
+### Automated Deployment
+We use **GitHub Actions** to automatically deploy changes to the AWS server.
+- Workflow: `.github/workflows/deploy_aws.yml`
+- Pushing to `main` triggers an SSH-based deployment (rsync).
 
 ## API Endpoints
 
@@ -174,6 +179,8 @@ Internal use only - Jarir.com QA Team
 
 ## Version History
 
+- **v2.5.0** - Stable Release: Complete AWS Migration, GitHub Actions CI/CD, and comprehensive documentation.
+- **v2.4.0** - Stable Release: API enhancements (API Key in Body support), `.htaccess` fixes for Authorization headers.
 - **v2.3.2** - Stable Release: UI Polish, Report Enhancements (Duration Tracking).
 - **v2.3.1** - Stable Release: Pass Rate Fixes, Login Tool Fixes, and Data Persistence (Input/Output logs).
 - **v2.3.0** - Stable Release: Server-Side Tool Migration (except Images) & Stability Fixes.
