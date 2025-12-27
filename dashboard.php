@@ -6,11 +6,6 @@ require_once 'tool_runners.php';
 require_login();
 $currentUser = current_user();
 
-const QA_DB_HOST = 'sql309.infinityfree.com';
-const QA_DB_PORT = 3306;
-const QA_DB_NAME = 'if0_40372489_init_db';
-const QA_DB_USER = 'if0_40372489';
-const QA_DB_PASS = 'KmUb1Azwzo';
 
 /********************
  * 1. API HANDLING (Must be before any HTML)
@@ -751,7 +746,8 @@ if (isset($_GET['api'])) {
         require_role(['admin']);
         // Retrieve current key
         $userId = $currentUser['id'];
-        $db = qa_db();
+        // Constants removed to use auth_session.php values
+        $db = get_db_auth();
         $stmt = $db->prepare("SELECT api_key FROM qa_users WHERE id = ?");
         $stmt->execute([$userId]);
         $res = $stmt->fetch();
@@ -764,7 +760,7 @@ if (isset($_GET['api'])) {
           // Generate new random key
           $userId = $currentUser['id'];
           $newKey = bin2hex(random_bytes(32));
-          $db = qa_db();
+          $db = get_db_auth();
 
           // Debug Log
           error_log("Generating API Key for User $userId");
@@ -810,113 +806,7 @@ if (is_dir($toolsDir)) {
  * 1. DATABASE (MySQL, auto-init)
  *********************************/
 
-function qa_db(): PDO
-{
-  static $pdo = null;
-  if ($pdo !== null)
-    return $pdo;
 
-  $dsn = 'mysql:host=' . QA_DB_HOST . ';port=' . QA_DB_PORT . ';dbname=' . QA_DB_NAME . ';charset=utf8mb4';
-  $pdo = new PDO($dsn, QA_DB_USER, QA_DB_PASS);
-  $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-  $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-
-  // Ensure tables exist (idempotent)
-  $pdo->exec("
-        CREATE TABLE IF NOT EXISTS qa_tool_configs (
-          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-          tool_code VARCHAR(64) NOT NULL,
-          config_name VARCHAR(191) NOT NULL,
-          config_json MEDIUMTEXT NOT NULL,
-          is_enabled TINYINT(1) NOT NULL DEFAULT 1,
-          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ");
-
-  $pdo->exec("
-        CREATE TABLE IF NOT EXISTS qa_test_runs (
-          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-          run_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          status VARCHAR(32) NOT NULL,
-          total_tests INT NOT NULL DEFAULT 0,
-          passed INT NOT NULL DEFAULT 0,
-          failed INT NOT NULL DEFAULT 0,
-          open_issues INT NOT NULL DEFAULT 0,
-          notes TEXT
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ");
-
-  $pdo->exec("
-        CREATE TABLE IF NOT EXISTS qa_run_results (
-          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-          run_id INT UNSIGNED NOT NULL,
-          tool_code VARCHAR(64) NOT NULL,
-          status VARCHAR(32) NOT NULL,
-          url TEXT,
-          parent TEXT,
-          payload MEDIUMTEXT,
-          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          INDEX idx_run_tool (run_id, tool_code)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ");
-
-  $pdo->exec("
-        CREATE TABLE IF NOT EXISTS qa_users (
-          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-          name VARCHAR(191) NOT NULL,
-          email VARCHAR(191) NOT NULL,
-          password_hash VARCHAR(255) NOT NULL DEFAULT '',
-          role VARCHAR(32) NOT NULL DEFAULT 'tester',
-          avatar_url TEXT,
-          is_active TINYINT(1) NOT NULL DEFAULT 1,
-          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ");
-
-  $pdo->exec("
-        CREATE TABLE IF NOT EXISTS qa_support_messages (
-          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-          user_id INT UNSIGNED NOT NULL,
-          subject VARCHAR(191),
-          message TEXT,
-          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          INDEX idx_support_user (user_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ");
-
-  // Dynamic Migrations
-  try {
-    $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'avatar_url'")->fetchAll();
-    if (count($cols) == 0)
-      $pdo->exec("ALTER TABLE qa_users ADD COLUMN avatar_url TEXT AFTER role");
-  } catch (Exception $e) {
-  }
-
-  try {
-    $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'password_hash'")->fetchAll();
-    if (count($cols) == 0)
-      $pdo->exec("ALTER TABLE qa_users ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT '' AFTER email");
-  } catch (Exception $e) {
-  }
-
-  try {
-    $cols = $pdo->query("SHOW COLUMNS FROM qa_support_messages LIKE 'is_read'")->fetchAll();
-    if (count($cols) == 0)
-      $pdo->exec("ALTER TABLE qa_support_messages ADD COLUMN is_read TINYINT(1) NOT NULL DEFAULT 0 AFTER message");
-  } catch (Exception $e) {
-  }
-
-  try {
-    $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'api_key'")->fetchAll();
-    if (count($cols) == 0) {
-      $pdo->exec("ALTER TABLE qa_users ADD COLUMN api_key VARCHAR(64) DEFAULT NULL UNIQUE AFTER password_hash");
-      $pdo->exec("CREATE INDEX idx_user_api_key ON qa_users(api_key)");
-    }
-  } catch (Exception $e) {
-  }
-
-  return $pdo;
-}
 
 
 
@@ -2161,7 +2051,7 @@ $TOOL_DEFS = [
       <button class="tab-btn" data-tab="users">Users</button>
       <button class="tab-btn" data-tab="support">Support Center</button>
       <?php if ($currentUser['role'] === 'admin'): ?>
-          <button class="tab-btn" data-tab="api">API Access</button>
+        <button class="tab-btn" data-tab="api">API Access</button>
       <?php endif; ?>
     </div>
 
@@ -2393,9 +2283,9 @@ $TOOL_DEFS = [
               <label>Tool</label>
               <select id="cfg-tool-code">
                 <?php foreach ($TOOL_DEFS as $t): ?>
-                    <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
-                      <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
-                    </option>
+                  <option value="<?php echo htmlspecialchars($t['code'], ENT_QUOTES); ?>">
+                    <?php echo htmlspecialchars($t['name'], ENT_QUOTES); ?>
+                  </option>
                 <?php endforeach; ?>
               </select>
             </div>

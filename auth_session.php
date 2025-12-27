@@ -44,6 +44,38 @@ function get_db_auth()
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS qa_test_runs (
+          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+          run_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          status VARCHAR(32) NOT NULL,
+          total_tests INT NOT NULL DEFAULT 0,
+          passed INT NOT NULL DEFAULT 0,
+          failed INT NOT NULL DEFAULT 0,
+          open_issues INT NOT NULL DEFAULT 0,
+          notes TEXT,
+          duration INT DEFAULT 0,
+          input_data LONGTEXT DEFAULT NULL,
+          output_data LONGTEXT DEFAULT NULL,
+          user_id INT UNSIGNED DEFAULT NULL,
+          INDEX idx_run_user (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS qa_run_results (
+          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+          run_id INT UNSIGNED NOT NULL,
+          tool_code VARCHAR(64) NOT NULL,
+          status VARCHAR(32) NOT NULL,
+          url TEXT,
+          parent TEXT,
+          payload MEDIUMTEXT,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_run_tool (run_id, tool_code)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
     // Dynamic Migrations (Idempotent)
     try {
         $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'avatar_url'")->fetchAll();
