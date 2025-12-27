@@ -23,6 +23,17 @@ $apiKey = '';
 
 // Try Header: "Authorization: Bearer <KEY>"
 $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+
+// Fallback for Apache/CGI where $_SERVER['HTTP_AUTHORIZATION'] might be stripped
+if (!$authHeader && function_exists('apache_request_headers')) {
+    $headers = apache_request_headers();
+    if (isset($headers['Authorization'])) {
+        $authHeader = $headers['Authorization'];
+    } elseif (isset($headers['authorization'])) {
+        $authHeader = $headers['authorization'];
+    }
+}
+
 if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
     $apiKey = $matches[1];
 }
