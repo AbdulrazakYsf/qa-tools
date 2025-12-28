@@ -228,6 +228,33 @@ if (isset($_GET['api'])) {
         echo json_encode(['ok' => true]);
         break;
 
+      /* Tools Admin */
+      case 'admin-list-tools':
+        require_role(['admin']);
+        $stmt = $db->query("SELECT * FROM qa_tools ORDER BY name ASC");
+        echo json_encode($stmt->fetchAll());
+        break;
+
+      case 'admin-save-tool':
+        require_role(['admin']);
+        $id = $input['id'] ?? null;
+        $visTester = !empty($input['visible_tester']) ? 1 : 0;
+        $visViewer = !empty($input['visible_viewer']) ? 1 : 0;
+        $apiEnabled = !empty($input['api_enabled']) ? 1 : 0;
+        $sInput = $input['sample_input'] ?? '';
+        $sOutput = $input['sample_output'] ?? '';
+        $guide = $input['manual_guide'] ?? '';
+
+        if (!$id) {
+          echo json_encode(['error' => 'Missing ID']);
+          break;
+        }
+
+        $stmt = $db->prepare("UPDATE qa_tools SET visible_tester=?, visible_viewer=?, api_enabled=?, sample_input=?, sample_output=?, manual_guide=? WHERE id=?");
+        $stmt->execute([$visTester, $visViewer, $apiEnabled, $sInput, $sOutput, $guide, $id]);
+        echo json_encode(['ok' => true]);
+        break;
+
       /* Profile */
       case 'update-profile':
         $user = current_user();
@@ -678,6 +705,27 @@ if (isset($_GET['api'])) {
           break;
         }
 
+        // Check API Permissions
+        // If called via API (isset($_GET['api'])), check if tool has api_enabled=1
+        // Actually, run-tool IS an API call.
+        // Users can run tools via UI (which calls this API) OR external scripts.
+        // Admin: Always allow.
+        // Others: Check DB.
+        $currentUser = current_user();
+        if ($currentUser['role'] !== 'admin') {
+          $stmt = $db->prepare("SELECT api_enabled FROM qa_tools WHERE code=?");
+          $stmt->execute([$code]);
+          $toolRow = $stmt->fetch();
+          // If tool not found in DB yet (legacy), default allow or strict? Default allow for now until populator runs.
+          // Yet prompt says "Admins... enable/disable...".
+          // If row exists and api_enabled == 0, BLOCK.
+          if ($toolRow && $toolRow['api_enabled'] == 0) {
+            http_response_code(403);
+            echo json_encode(['error' => "API Access Disabled for tool '$code'."]);
+            exit;
+          }
+        }
+
         $res = [];
         // Switch based on tool code
         switch ($code) {
@@ -800,6 +848,30 @@ if (is_dir($toolsDir)) {
     $code = basename($file, '.html');
     $TOOLS_HTML[$code] = file_get_contents($file);
   }
+}
+
+// Auto-Sync Tools to DB
+try {
+  $db = get_db_auth();
+  $chk = $db->query("SELECT COUNT(*) as c FROM qa_tools")->fetch();
+  if ($chk && $chk['c'] == 0) {
+    $stmt = $db->prepare("INSERT INTO qa_tools (code, name) VALUES (?, ?)");
+    foreach ($TOOL_DEFS as $t) {
+      try {
+        $stmt->execute([$t['code'], $t['name']]);
+      } catch (Exception $e) {
+      }
+    }
+  }
+} catch (Exception $e) {
+}
+
+// Fetch Tools Data for Frontend
+$DB_TOOLS_DATA = [];
+try {
+  $db = get_db_auth();
+  $DB_TOOLS_DATA = $db->query("SELECT * FROM qa_tools")->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
 }
 
 /*********************************
@@ -2051,6 +2123,7 @@ $TOOL_DEFS = [
       <button class="tab-btn" data-tab="users">Users</button>
       <button class="tab-btn" data-tab="support">Support Center</button>
       <?php if ($currentUser['role'] === 'admin'): ?>
+        <button class="tab-btn" data-tab="tools">Tools</button>
         <button class="tab-btn" data-tab="api">API Access</button>
       <?php endif; ?>
     </div>
@@ -2668,6 +2741,7 @@ $TOOL_DEFS = [
 
   <script>
     const TOOL_DEFS = <?php echo json_encode($TOOL_DEFS, JSON_UNESCAPED_UNICODE); ?>;
+    const DB_TOOLS = <?php echo json_encode($DB_TOOLS_DATA, JSON_UNESCAPED_UNICODE); ?>;
     const TOOL_HTML = <?php echo json_encode($TOOLS_HTML, JSON_UNESCAPED_UNICODE); ?>;
 
     let ACTIVE_TOOL = null;
@@ -2795,9 +2869,22 @@ $TOOL_DEFS = [
     /* Modules grid */
     const modulesGrid = document.getElementById('modules-grid');
     TOOL_DEFS.forEach((t) => {
+      // 1. Check Visibility
+      if (DB_TOOLS && DB_TOOLS.length > 0) {
+        const dbT = DB_TOOLS.find(d => d.code === t.code);
+        if (dbT) {
+          if (CURRENT_USER_ROLE === 'tester' && dbT.visible_tester == 0) return;
+          if (CURRENT_USER_ROLE === 'viewer' && dbT.visible_viewer == 0) return;
+        }
+      }
+
       const div = document.createElement('div');
       div.className = 'module-tile';
       div.dataset.code = t.code;
+      div.onclick = (e) => {
+        if (e.target.tagName !== 'INPUT')
+          openTool(t.code);
+      };
       div.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
       <div>
@@ -3002,6 +3089,98 @@ $TOOL_DEFS = [
         return;
       }
       iframe.srcdoc = html;
+    }
+
+    // --- TOOLS ADMIN LOGIC ---
+
+    async function loadToolsAdmin() {
+      const tbody = document.querySelector('#tools-admin-table tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+
+      try {
+        const tools = await api('admin-list-tools');
+        tbody.innerHTML = '';
+        tools.forEach(t => {
+          const tr = document.createElement('tr');
+          const visTester = t.visible_tester == 1 ? '<span class="badge badge-low">Yes</span>' : '<span class="badge badge-urgent">No</span>';
+          const visViewer = t.visible_viewer == 1 ? '<span class="badge badge-low">Yes</span>' : '<span class="badge badge-urgent">No</span>';
+          const apiEn = t.api_enabled == 1 ? '<span class="badge badge-high">On</span>' : '<span class="badge badge-medium">Off</span>';
+
+          tr.innerHTML = `
+            <td><strong>${t.name}</strong></td>
+            <td><code>${t.code}</code></td>
+            <td>${visTester}</td>
+            <td>${visViewer}</td>
+            <td>${apiEn}</td>
+            <td>
+              <button class="btn-small btn-secondary" onclick='editTool(${JSON.stringify(t)})'>Edit</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-danger">Error: ${e.message}</td></tr>`;
+      }
+    }
+
+    function editTool(t) {
+      document.getElementById('tool-id').value = t.id;
+      document.getElementById('tool-name').value = t.name;
+      document.getElementById('tool-vis-tester').checked = (t.visible_tester == 1);
+      document.getElementById('tool-vis-viewer').checked = (t.visible_viewer == 1);
+      document.getElementById('tool-api-enabled').checked = (t.api_enabled == 1);
+      document.getElementById('tool-sample-input').value = t.sample_input || '';
+      document.getElementById('tool-sample-output').value = t.sample_output || '';
+      document.getElementById('tool-guide').value = t.manual_guide || '';
+
+      document.getElementById('tool-modal').classList.add('active');
+    }
+
+    function closeToolModal() {
+      document.getElementById('tool-modal').classList.remove('active');
+    }
+
+    async function saveToolConfig() {
+      const id = document.getElementById('tool-id').value;
+      const visTester = document.getElementById('tool-vis-tester').checked ? 1 : 0;
+      const visViewer = document.getElementById('tool-vis-viewer').checked ? 1 : 0;
+      const apiEnabled = document.getElementById('tool-api-enabled').checked ? 1 : 0;
+      const sInput = document.getElementById('tool-sample-input').value;
+      const sOutput = document.getElementById('tool-sample-output').value;
+      const guide = document.getElementById('tool-guide').value;
+
+      try {
+        await api('admin-save-tool', {
+          id,
+          visible_tester: visTester,
+          visible_viewer: visViewer,
+          api_enabled: apiEnabled,
+          sample_input: sInput,
+          sample_output: sOutput,
+          manual_guide: guide
+        });
+        closeToolModal();
+        loadToolsAdmin();
+        alert('Tool configuration saved.');
+        // Optionally reload page to update sidebar/modules if needed, or just warn user
+        if (confirm('Configuration saved. Reload page to see visibility changes?')) {
+          location.reload();
+        }
+      } catch (e) {
+        alert('Error saving tool: ' + e.message);
+      }
+    }
+
+    // Hook into Tab Switching to load tools
+    const originalOpenTab = window.openTab; // Assuming openTab is defined globally or we hook button clicks
+    // Actually, looking at the code, openTab logic might be inline or elsewhere.
+    // Let's just bind the click event.
+    const toolsBtn = document.querySelector('button[data-tab="tools"]');
+    if (toolsBtn) {
+      toolsBtn.addEventListener('click', () => {
+        loadToolsAdmin();
+      });
     }
 
     /* â”€â”€â”€â”€â”€â”€â”€â”€â”€ UI Controls â”€â”€â”€â”€â”€â”€â”€â”€â”€ */

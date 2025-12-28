@@ -177,6 +177,22 @@ function get_db_auth()
     } catch (Exception $e) {
     }
 
+    // New Tools Administration Table
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS qa_tools (
+          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+          code VARCHAR(64) NOT NULL UNIQUE,
+          name VARCHAR(191) NOT NULL,
+          visible_tester TINYINT(1) NOT NULL DEFAULT 1,
+          visible_viewer TINYINT(1) NOT NULL DEFAULT 1,
+          api_enabled TINYINT(1) NOT NULL DEFAULT 1,
+          sample_input TEXT,
+          sample_output TEXT,
+          manual_guide TEXT,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
     try {
         $cols = $pdo->query("SHOW COLUMNS FROM qa_users LIKE 'api_key'")->fetchAll();
         if (count($cols) == 0) {
