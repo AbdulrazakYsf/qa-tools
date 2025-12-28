@@ -2592,6 +2592,31 @@ $TOOL_DEFS = [
     </div>
   </section>
 
+  <!-- TOOLS ADMIN TAB -->
+  <section id="tab-tools" class="tab-content">
+    <div class="section-card">
+      <div class="section-header">
+        <h2>Tools Administration</h2>
+        <small>Manage tool visibility and default configurations.</small>
+      </div>
+      <table class="table" id="tools-admin-table">
+        <thead>
+          <tr>
+            <th>Tool Name</th>
+            <th>Code</th>
+            <th>Visible (Tester)</th>
+            <th>Visible (Viewer)</th>
+            <th>API Enabled</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="6">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <!-- API TAB -->
   <section id="tab-api" class="tab-content">
     <div class="section-card">
@@ -2684,6 +2709,51 @@ $TOOL_DEFS = [
             <button type="button" class="btn-primary" id="save-profile-btn" style="flex:1;">Save Changes</button>
             <button type="button" class="btn-ghost" onclick="location.href='logout.php'"
               style="flex:1; border-color:#ffcdd2; color:#c62828;">Logout</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN TOOL EDIT MODAL -->
+  <div class="modal-overlay" id="admin-tool-modal">
+    <div class="modal-card" style="max-width:500px;">
+      <div class="modal-header">
+        <h3>Edit Tool Configuration</h3>
+        <button class="modal-close" onclick="closeAdminToolModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="admin-tool-form" onsubmit="event.preventDefault(); saveToolConfig();">
+          <input type="hidden" id="tool-id">
+          <div class="form-group" style="margin-bottom:12px;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Tool Name</label>
+            <input type="text" id="tool-name" class="form-control" readonly style="background:#f0f0f0;">
+          </div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Visibility & Access</label>
+            <div style="display:flex; gap:16px;">
+              <label style="font-size:13px;"><input type="checkbox" id="tool-vis-tester"> Visible to Testers</label>
+              <label style="font-size:13px;"><input type="checkbox" id="tool-vis-viewer"> Visible to Viewers</label>
+            </div>
+            <div style="margin-top:4px;">
+              <label style="font-size:13px;"><input type="checkbox" id="tool-api-enabled"> API Access Enabled</label>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Sample Input (Placeholder)</label>
+            <textarea id="tool-sample-input" class="form-control" rows="3" style="width:100%;"></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Sample Output (JSON Structure)</label>
+            <textarea id="tool-sample-output" class="form-control" rows="3" style="width:100%;"></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:16px;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Manual Guide / Notes</label>
+            <textarea id="tool-guide" class="form-control" rows="3" style="width:100%;"></textarea>
+          </div>
+          <div class="actions-row">
+            <button type="submit" class="btn-primary">Save Changes</button>
+            <button type="button" class="btn-ghost" onclick="closeAdminToolModal()">Cancel</button>
           </div>
         </form>
       </div>
@@ -3113,17 +3183,26 @@ $TOOL_DEFS = [
 
     async function loadToolsAdmin() {
       const tbody = document.querySelector('#tools-admin-table tbody');
-      if (!tbody) return;
-      tbody.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+      if (!tbody) {
+          console.error('CRITICAL: #tools-admin-table tbody selector failed.');
+          // Only alert if the tab is actually active to avoid spam on page load
+          if (document.querySelector('.tab-btn[data-tab="tools"].active')) {
+             alert('System Error: Tools Admin Table container not found. Please refresh or contact support.');
+          }
+          return;
+      }
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">Loading tools configuration...</td></tr>';
 
       try {
         const tools = await api('admin-list-tools');
+        if (!Array.isArray(tools)) throw new Error('Invalid response from server (expected array)');
+        
         tbody.innerHTML = '';
         tools.forEach(t => {
           const tr = document.createElement('tr');
-          const visTester = t.visible_tester == 1 ? '<span class="badge badge-low">Yes</span>' : '<span class="badge badge-urgent">No</span>';
-          const visViewer = t.visible_viewer == 1 ? '<span class="badge badge-low">Yes</span>' : '<span class="badge badge-urgent">No</span>';
-          const apiEn = t.api_enabled == 1 ? '<span class="badge badge-high">On</span>' : '<span class="badge badge-medium">Off</span>';
+          const visTester = t.visible_tester == 1 ? '<span class="badge badge-low" style="background:#e8f5e9;color:#2e7d32">Yes</span>' : '<span class="badge badge-urgent" style="background:#ffebee;color:#c62828">No</span>';
+          const visViewer = t.visible_viewer == 1 ? '<span class="badge badge-low" style="background:#e8f5e9;color:#2e7d32">Yes</span>' : '<span class="badge badge-urgent" style="background:#ffebee;color:#c62828">No</span>';
+          const apiEn = t.api_enabled == 1 ? '<span class="badge badge-high" style="background:#e3f2fd;color:#1565c0">On</span>' : '<span class="badge badge-medium" style="background:#eee;color:#666">Off</span>';
 
           tr.innerHTML = `
             <td><strong>${t.name}</strong></td>
@@ -3138,7 +3217,12 @@ $TOOL_DEFS = [
           tbody.appendChild(tr);
         });
       } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-danger">Error: ${e.message}</td></tr>`;
+        console.error('Tools Admin Load Error:', e);
+        tbody.innerHTML = `<tr><td colspan="6" class="text-danger" style="text-align:center; padding:20px;">
+           <strong>Error loading tools:</strong> ${e.message}<br>
+           <small>Check console for details.</small>
+        </td></tr>`;
+        alert('Failed to load tools: ' + e.message);
       }
     }
 
@@ -3152,11 +3236,11 @@ $TOOL_DEFS = [
       document.getElementById('tool-sample-output').value = t.sample_output || '';
       document.getElementById('tool-guide').value = t.manual_guide || '';
 
-      document.getElementById('tool-modal').classList.add('active');
+      document.getElementById('admin-tool-modal').classList.add('active');
     }
 
-    function closeToolModal() {
-      document.getElementById('tool-modal').classList.remove('active');
+    function closeAdminToolModal() {
+      document.getElementById('admin-tool-modal').classList.remove('active');
     }
 
     async function saveToolConfig() {
@@ -3178,10 +3262,9 @@ $TOOL_DEFS = [
           sample_output: sOutput,
           manual_guide: guide
         });
-        closeToolModal();
+        closeAdminToolModal();
         loadToolsAdmin();
         alert('Tool configuration saved.');
-        // Optionally reload page to update sidebar/modules if needed, or just warn user
         if (confirm('Configuration saved. Reload page to see visibility changes?')) {
           location.reload();
         }
