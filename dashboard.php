@@ -230,9 +230,15 @@ if (isset($_GET['api'])) {
 
       /* Tools Admin */
       case 'admin-list-tools':
-        require_role(['admin']);
-        $stmt = $db->query("SELECT * FROM qa_tools ORDER BY name ASC");
-        echo json_encode($stmt->fetchAll());
+        try {
+            require_role(['admin']);
+            $stmt = $db->query("SELECT * FROM qa_tools ORDER BY name ASC");
+            $rows = $stmt->fetchAll();
+            echo json_encode($rows);
+        } catch (Exception $e) {
+            error_log("API admin-list-tools error: " . $e->getMessage());
+            echo json_encode(['error' => $e->getMessage()]);
+        }
         break;
 
       case 'admin-save-tool':
@@ -855,15 +861,21 @@ try {
   $db = get_db_auth();
   $chk = $db->query("SELECT COUNT(*) as c FROM qa_tools")->fetch();
   if ($chk && $chk['c'] == 0) {
-    $stmt = $db->prepare("INSERT INTO qa_tools (code, name) VALUES (?, ?)");
-    foreach ($TOOL_DEFS as $t) {
-      try {
-        $stmt->execute([$t['code'], $t['name']]);
-      } catch (Exception $e) {
-      }
+    if (isset($TOOL_DEFS) && is_array($TOOL_DEFS)) {
+        $stmt = $db->prepare("INSERT INTO qa_tools (code, name) VALUES (?, ?)");
+        foreach ($TOOL_DEFS as $t) {
+          try {
+            $stmt->execute([$t['code'], $t['name']]);
+          } catch (Exception $e) {
+             error_log("Error inserting tool {$t['code']}: " . $e->getMessage());
+          }
+        }
+    } else {
+        error_log("Warning: TOOL_DEFS not set or empty during auto-sync.");
     }
   }
 } catch (Exception $e) {
+    error_log("Error in Auto-Sync Tools: " . $e->getMessage());
 }
 
 // Fetch Tools Data for Frontend
@@ -872,6 +884,7 @@ try {
   $db = get_db_auth();
   $DB_TOOLS_DATA = $db->query("SELECT * FROM qa_tools")->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
+    error_log("Error fetching DB_TOOLS_DATA: " . $e->getMessage());
 }
 
 /*********************************
