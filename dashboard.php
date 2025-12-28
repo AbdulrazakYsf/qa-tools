@@ -6,6 +6,31 @@ require_once 'tool_runners.php';
 require_login();
 $currentUser = current_user();
 
+// Ensure DB Schema (qa_tools) exists
+try {
+  $db = get_db_auth();
+  // Check if table exists (silent verify)
+  $db->query("SELECT 1 FROM qa_tools LIMIT 1");
+} catch (Exception $e) {
+  // Table missing, create it
+  try {
+     $db->exec("CREATE TABLE IF NOT EXISTS qa_tools (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        visible_tester TINYINT DEFAULT 1,
+        visible_viewer TINYINT DEFAULT 1,
+        api_enabled TINYINT DEFAULT 1,
+        sample_input TEXT,
+        sample_output TEXT,
+        manual_guide TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  } catch (Exception $ex) {
+     error_log("Failed to create qa_tools table: " . $ex->getMessage());
+  }
+}
+
 
 /********************
  * 1. API HANDLING (Must be before any HTML)
@@ -236,6 +261,7 @@ if (isset($_GET['api'])) {
             $rows = $stmt->fetchAll();
             echo json_encode($rows);
         } catch (Exception $e) {
+            http_response_code(500);
             error_log("API admin-list-tools error: " . $e->getMessage());
             echo json_encode(['error' => $e->getMessage()]);
         }
