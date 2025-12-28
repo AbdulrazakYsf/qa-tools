@@ -6,11 +6,47 @@ require_once 'tool_runners.php';
 require_login();
 $currentUser = current_user();
 
-// Ensure DB Schema (qa_tools) exists
+// --- MOVED DEFINITIONS: TOOL_DEFS ---
+$TOOL_DEFS = [
+  ['code' => 'brand', 'name' => 'Brand Links'],
+  ['code' => 'cms', 'name' => 'CMS Blocks'],
+  ['code' => 'category', 'name' => 'Category Links'],
+  ['code' => 'category_filter', 'name' => 'Filtered Category'],
+  ['code' => 'getcategories', 'name' => 'Get Categories'],
+  ['code' => 'images', 'name' => 'Images'],
+  ['code' => 'login', 'name' => 'Login'],
+  ['code' => 'price_checker', 'name' => 'Price Checker'],
+  ['code' => 'products', 'name' => 'Products'],
+  ['code' => 'sku', 'name' => 'SKU Lookup'],
+  ['code' => 'stock', 'name' => 'Stock / Availability'],
+  ['code' => 'sub_category', 'name' => 'Subcategories'],
+  ['code' => 'add_to_cart', 'name' => 'Add to Cart'],
+  ['code' => 'speed_test', 'name' => 'Speed Test'],
+  ['code' => 'link_extractor', 'name' => 'Link Extractor'],
+  ['code' => 'asset_count', 'name' => 'Asset Counter'],
+  ['code' => 'json_validator', 'name' => 'JSON Validator'],
+  ['code' => 'headers_check', 'name' => 'Headers Inspector'],
+];
+
+// Ensure DB Schema (qa_tools) exists & Populate
 try {
   $db = get_db_auth();
   // Check if table exists (silent verify)
   $db->query("SELECT 1 FROM qa_tools LIMIT 1");
+  
+  // Auto-Populate if empty
+  $chk = $db->query("SELECT COUNT(*) as c FROM qa_tools")->fetch();
+  if ($chk && $chk['c'] == 0) {
+      $stmt = $db->prepare("INSERT INTO qa_tools (code, name) VALUES (?, ?)");
+      foreach ($TOOL_DEFS as $t) {
+        try {
+          $stmt->execute([$t['code'], $t['name']]);
+        } catch (Exception $e) {
+             // Ignore duplicates if any logic mismatch
+        }
+      }
+  }
+
 } catch (Exception $e) {
   // Table missing, create it
   try {
@@ -26,6 +62,12 @@ try {
         manual_guide TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+     // Retry Populate
+     $stmt = $db->prepare("INSERT INTO qa_tools (code, name) VALUES (?, ?)");
+     foreach ($TOOL_DEFS as $t) {
+       try { $stmt->execute([$t['code'], $t['name']]); } catch (Exception $x) {}
+     }
   } catch (Exception $ex) {
      error_log("Failed to create qa_tools table: " . $ex->getMessage());
   }
@@ -882,27 +924,7 @@ if (is_dir($toolsDir)) {
   }
 }
 
-// Auto-Sync Tools to DB
-try {
-  $db = get_db_auth();
-  $chk = $db->query("SELECT COUNT(*) as c FROM qa_tools")->fetch();
-  if ($chk && $chk['c'] == 0) {
-    if (isset($TOOL_DEFS) && is_array($TOOL_DEFS)) {
-        $stmt = $db->prepare("INSERT INTO qa_tools (code, name) VALUES (?, ?)");
-        foreach ($TOOL_DEFS as $t) {
-          try {
-            $stmt->execute([$t['code'], $t['name']]);
-          } catch (Exception $e) {
-             error_log("Error inserting tool {$t['code']}: " . $e->getMessage());
-          }
-        }
-    } else {
-        error_log("Warning: TOOL_DEFS not set or empty during auto-sync.");
-    }
-  }
-} catch (Exception $e) {
-    error_log("Error in Auto-Sync Tools: " . $e->getMessage());
-}
+// Auto-Sync Tools Logic Moved to Top
 
 // Fetch Tools Data for Frontend
 $DB_TOOLS_DATA = [];
@@ -925,26 +947,7 @@ try {
  * 3. PAGE RENDERING
  ********************/
 
-$TOOL_DEFS = [
-  ['code' => 'brand', 'name' => 'Brand Links'],
-  ['code' => 'cms', 'name' => 'CMS Blocks'],
-  ['code' => 'category', 'name' => 'Category Links'],
-  ['code' => 'category_filter', 'name' => 'Filtered Category'],
-  ['code' => 'getcategories', 'name' => 'Get Categories'],
-  ['code' => 'images', 'name' => 'Images'],
-  ['code' => 'login', 'name' => 'Login'],
-  ['code' => 'price_checker', 'name' => 'Price Checker'],
-  ['code' => 'products', 'name' => 'Products'],
-  ['code' => 'sku', 'name' => 'SKU Lookup'],
-  ['code' => 'stock', 'name' => 'Stock / Availability'],
-  ['code' => 'sub_category', 'name' => 'Subcategories'],
-  ['code' => 'add_to_cart', 'name' => 'Add to Cart'],
-  ['code' => 'speed_test', 'name' => 'Speed Test'],
-  ['code' => 'link_extractor', 'name' => 'Link Extractor'],
-  ['code' => 'asset_count', 'name' => 'Asset Counter'],
-  ['code' => 'json_validator', 'name' => 'JSON Validator'],
-  ['code' => 'headers_check', 'name' => 'Headers Inspector'],
-];
+// TOOL_DEFS Moved to Top
 
 ?>
 <!DOCTYPE html>
