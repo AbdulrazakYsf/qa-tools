@@ -2863,6 +2863,11 @@ $TOOL_DEFS = [
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+        
+        // Hook: Load Tools Data if switching to tools tab
+        if (btn.dataset.tab === 'tools') {
+          if (typeof loadToolsAdmin === 'function') loadToolsAdmin();
+        }
       });
     });
 
