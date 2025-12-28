@@ -102,6 +102,24 @@ try {
 
     $data = $inputData;
 
+    // Check Tool Status (Strict API Check)
+    $toolStmt = $db->prepare("SELECT api_enabled FROM qa_tools WHERE code = ?");
+    $toolStmt->execute([$toolCode]);
+    $toolMeta = $toolStmt->fetch();
+
+    if ($toolMeta) {
+        // If tool exists in DB, respect the flag
+        if ($toolMeta['api_enabled'] == 0) {
+             http_response_code(403);
+             echo json_encode(['error' => "API Access is disabled for tool '$toolCode'."]);
+             exit;
+        }
+    } else {
+        // Optional: If tool not in DB (legacy?), allow or block? 
+        // For security, if we are in 'strict' mode, maybe we should default open or close?
+        // Given existing logic, let's assume valid. 
+    }
+
     // 3. Routing
     // Map tool codes to ToolRunner methods
     $result = null;

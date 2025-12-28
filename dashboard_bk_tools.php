@@ -6,47 +6,11 @@ require_once 'tool_runners.php';
 require_login();
 $currentUser = current_user();
 
-// --- MOVED DEFINITIONS: TOOL_DEFS ---
-$TOOL_DEFS = [
-  ['code' => 'brand', 'name' => 'Brand Links'],
-  ['code' => 'cms', 'name' => 'CMS Blocks'],
-  ['code' => 'category', 'name' => 'Category Links'],
-  ['code' => 'category_filter', 'name' => 'Filtered Category'],
-  ['code' => 'getcategories', 'name' => 'Get Categories'],
-  ['code' => 'images', 'name' => 'Images'],
-  ['code' => 'login', 'name' => 'Login'],
-  ['code' => 'price_checker', 'name' => 'Price Checker'],
-  ['code' => 'products', 'name' => 'Products'],
-  ['code' => 'sku', 'name' => 'SKU Lookup'],
-  ['code' => 'stock', 'name' => 'Stock / Availability'],
-  ['code' => 'sub_category', 'name' => 'Subcategories'],
-  ['code' => 'add_to_cart', 'name' => 'Add to Cart'],
-  ['code' => 'speed_test', 'name' => 'Speed Test'],
-  ['code' => 'link_extractor', 'name' => 'Link Extractor'],
-  ['code' => 'asset_count', 'name' => 'Asset Counter'],
-  ['code' => 'json_validator', 'name' => 'JSON Validator'],
-  ['code' => 'headers_check', 'name' => 'Headers Inspector'],
-];
-
-// Ensure DB Schema (qa_tools) exists & Populate
+// Ensure DB Schema (qa_tools) exists
 try {
   $db = get_db_auth();
   // Check if table exists (silent verify)
   $db->query("SELECT 1 FROM qa_tools LIMIT 1");
-  
-  // Auto-Populate if empty
-  $chk = $db->query("SELECT COUNT(*) as c FROM qa_tools")->fetch();
-  if ($chk && $chk['c'] == 0) {
-      $stmt = $db->prepare("INSERT INTO qa_tools (code, name) VALUES (?, ?)");
-      foreach ($TOOL_DEFS as $t) {
-        try {
-          $stmt->execute([$t['code'], $t['name']]);
-        } catch (Exception $e) {
-             // Ignore duplicates if any logic mismatch
-        }
-      }
-  }
-
 } catch (Exception $e) {
   // Table missing, create it
   try {
@@ -62,12 +26,6 @@ try {
         manual_guide TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-     // Retry Populate
-     $stmt = $db->prepare("INSERT INTO qa_tools (code, name) VALUES (?, ?)");
-     foreach ($TOOL_DEFS as $t) {
-       try { $stmt->execute([$t['code'], $t['name']]); } catch (Exception $x) {}
-     }
   } catch (Exception $ex) {
      error_log("Failed to create qa_tools table: " . $ex->getMessage());
   }
@@ -924,7 +882,27 @@ if (is_dir($toolsDir)) {
   }
 }
 
-// Auto-Sync Tools Logic Moved to Top
+// Auto-Sync Tools to DB
+try {
+  $db = get_db_auth();
+  $chk = $db->query("SELECT COUNT(*) as c FROM qa_tools")->fetch();
+  if ($chk && $chk['c'] == 0) {
+    if (isset($TOOL_DEFS) && is_array($TOOL_DEFS)) {
+        $stmt = $db->prepare("INSERT INTO qa_tools (code, name) VALUES (?, ?)");
+        foreach ($TOOL_DEFS as $t) {
+          try {
+            $stmt->execute([$t['code'], $t['name']]);
+          } catch (Exception $e) {
+             error_log("Error inserting tool {$t['code']}: " . $e->getMessage());
+          }
+        }
+    } else {
+        error_log("Warning: TOOL_DEFS not set or empty during auto-sync.");
+    }
+  }
+} catch (Exception $e) {
+    error_log("Error in Auto-Sync Tools: " . $e->getMessage());
+}
 
 // Fetch Tools Data for Frontend
 $DB_TOOLS_DATA = [];
@@ -947,7 +925,26 @@ try {
  * 3. PAGE RENDERING
  ********************/
 
-// TOOL_DEFS Moved to Top
+$TOOL_DEFS = [
+  ['code' => 'brand', 'name' => 'Brand Links'],
+  ['code' => 'cms', 'name' => 'CMS Blocks'],
+  ['code' => 'category', 'name' => 'Category Links'],
+  ['code' => 'category_filter', 'name' => 'Filtered Category'],
+  ['code' => 'getcategories', 'name' => 'Get Categories'],
+  ['code' => 'images', 'name' => 'Images'],
+  ['code' => 'login', 'name' => 'Login'],
+  ['code' => 'price_checker', 'name' => 'Price Checker'],
+  ['code' => 'products', 'name' => 'Products'],
+  ['code' => 'sku', 'name' => 'SKU Lookup'],
+  ['code' => 'stock', 'name' => 'Stock / Availability'],
+  ['code' => 'sub_category', 'name' => 'Subcategories'],
+  ['code' => 'add_to_cart', 'name' => 'Add to Cart'],
+  ['code' => 'speed_test', 'name' => 'Speed Test'],
+  ['code' => 'link_extractor', 'name' => 'Link Extractor'],
+  ['code' => 'asset_count', 'name' => 'Asset Counter'],
+  ['code' => 'json_validator', 'name' => 'JSON Validator'],
+  ['code' => 'headers_check', 'name' => 'Headers Inspector'],
+];
 
 ?>
 <!DOCTYPE html>
@@ -2746,61 +2743,43 @@ try {
 
   <!-- ADMIN TOOL EDIT MODAL -->
   <div class="modal-overlay" id="admin-tool-modal">
-    <div class="modal-card" style="max-width:550px; border-radius:12px; overflow:hidden; box-shadow:0 15px 40px rgba(0,0,0,0.15);">
-      <div class="modal-header" style="background:#f1f5f9; padding:12px 20px; border-bottom:1px solid #e2e8f0;">
-        <h3 style="margin:0; font-size:16px; color:#334155; font-weight:600;">Edit Tool Configuration</h3>
-        <button class="modal-close" style="top:12px; right:15px; background:none; border:none; font-size:22px; color:#64748b; cursor:pointer;" onclick="closeAdminToolModal()">&times;</button>
+    <div class="modal-card" style="max-width:500px;">
+      <div class="modal-header">
+        <h3>Edit Tool Configuration</h3>
+        <button class="modal-close" onclick="closeAdminToolModal()">&times;</button>
       </div>
-      <div class="modal-body" style="padding:20px;">
+      <div class="modal-body">
         <form id="admin-tool-form" onsubmit="event.preventDefault(); saveToolConfig();">
           <input type="hidden" id="tool-id">
-          
-          <!-- Tool Name Bar -->
-          <div style="background:#f8fafc; padding:10px 15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
-             <span style="font-size:12px; color:#64748b; font-weight:500;">TARGET TOOL</span>
-             <input type="text" id="tool-name" readonly style="background:transparent; border:none; font-weight:700; color:#0f172a; text-align:right; font-size:14px; width:200px;">
+          <div class="form-group" style="margin-bottom:12px;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Tool Name</label>
+            <input type="text" id="tool-name" class="form-control" readonly style="background:#f0f0f0;">
           </div>
-
-          <!-- Visibility & Permissions Grid -->
-          <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin-bottom:20px;">
-             <!-- Tester -->
-             <label style="cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px; border:1px solid #e2e8f0; border-radius:8px; transition:all 0.2s;" onmouseover="this.style.borderColor='#cbd5e1'" onmouseout="this.style.borderColor='#e2e8f0'">
-                <input type="checkbox" id="tool-vis-tester" style="margin-bottom:6px; transform:scale(1.2);">
-                <span style="font-size:12px; color:#334155; font-weight:500;">Tester Access</span>
-             </label>
-             <!-- Viewer -->
-             <label style="cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px; border:1px solid #e2e8f0; border-radius:8px; transition:all 0.2s;" onmouseover="this.style.borderColor='#cbd5e1'" onmouseout="this.style.borderColor='#e2e8f0'">
-                <input type="checkbox" id="tool-vis-viewer" style="margin-bottom:6px; transform:scale(1.2);">
-                <span style="font-size:12px; color:#334155; font-weight:500;">Viewer Access</span>
-             </label>
-             <!-- API -->
-             <label style="cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px; border:1px solid #e2e8f0; border-radius:8px; transition:all 0.2s; background:#f0f9ff;" onmouseover="this.style.borderColor='#90caf9'" onmouseout="this.style.borderColor='#e2e8f0'">
-                <input type="checkbox" id="tool-api-enabled" style="margin-bottom:6px; transform:scale(1.2);">
-                <span style="font-size:12px; color:#0369a1; font-weight:600;">API Enabled</span>
-             </label>
-          </div>
-
-          <!-- Samples Grid -->
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
-            <div>
-              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; color:#64748b; margin-bottom:6px;">Sample Input</label>
-              <textarea id="tool-sample-input" class="form-control" rows="5" style="width:100%; font-family:monospace; font-size:12px; line-height:1.4; resize:none; padding:10px; border-color:#cbd5e1;" placeholder="Default inputs..."></textarea>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Visibility & Access</label>
+            <div style="display:flex; gap:16px;">
+              <label style="font-size:13px;"><input type="checkbox" id="tool-vis-tester"> Visible to Testers</label>
+              <label style="font-size:13px;"><input type="checkbox" id="tool-vis-viewer"> Visible to Viewers</label>
             </div>
-            <div>
-              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; color:#64748b; margin-bottom:6px;">Sample Output</label>
-              <textarea id="tool-sample-output" class="form-control" rows="5" style="width:100%; font-family:monospace; font-size:12px; line-height:1.4; resize:none; padding:10px; border-color:#cbd5e1;" placeholder="{ 'json': 'structure' }"></textarea>
+            <div style="margin-top:4px;">
+              <label style="font-size:13px;"><input type="checkbox" id="tool-api-enabled"> API Access Enabled</label>
             </div>
           </div>
-
-          <!-- Guide -->
-          <div style="margin-bottom:24px;">
-             <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; color:#64748b; margin-bottom:6px;">Manual / Notes</label>
-             <textarea id="tool-guide" class="form-control" rows="2" style="width:100%; font-size:13px; padding:10px; border-color:#cbd5e1; resize:none;" placeholder="Brief instructions for users..."></textarea>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Sample Input (Placeholder)</label>
+            <textarea id="tool-sample-input" class="form-control" rows="3" style="width:100%;"></textarea>
           </div>
-
-          <div class="actions-row" style="display:flex; gap:12px; border-top:1px solid #f1f5f9; padding-top:16px;">
-            <button type="submit" class="btn-primary" style="flex:1; justify-content:center; font-weight:600; padding:10px;">Save Configuration</button>
-            <button type="button" class="btn-ghost" onclick="closeAdminToolModal()" style="flex:0 0 100px; justify-content:center; color:#64748b;">Cancel</button>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Sample Output (JSON Structure)</label>
+            <textarea id="tool-sample-output" class="form-control" rows="3" style="width:100%;"></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:16px;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Manual Guide / Notes</label>
+            <textarea id="tool-guide" class="form-control" rows="3" style="width:100%;"></textarea>
+          </div>
+          <div class="actions-row">
+            <button type="submit" class="btn-primary">Save Changes</button>
+            <button type="button" class="btn-ghost" onclick="closeAdminToolModal()">Cancel</button>
           </div>
         </form>
       </div>

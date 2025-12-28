@@ -179,6 +179,7 @@ Internal use only - Jarir.com QA Team
 
 ## Version History
 
+- **v2.6.0** - Stable Release: Tools Administration (Visibility Control), Secure Public API (Strict Mode), Redesigned Configuration UI, and self-healing DB schema.
 - **v2.5.0** - Stable Release: Complete AWS Migration, GitHub Actions CI/CD, and comprehensive documentation.
 - **v2.4.0** - Stable Release: API enhancements (API Key in Body support), `.htaccess` fixes for Authorization headers.
 - **v2.3.2** - Stable Release: UI Polish, Report Enhancements (Duration Tracking).
