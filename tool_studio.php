@@ -125,10 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         <ul class="log-list" id="log-list">
             <!-- Steps go here -->
         </ul>
-        <div style="padding:10px; border-top:1px solid #ddd; background:#f9f9f9; display:none;" id="save-panel">
-            <input type="text" id="new-tool-name" placeholder="Tool Name (e.g. Checkout Flow)" style="width:100%; padding:8px; margin-bottom:5px; border:1px solid #ddd; border-radius:4px;">
-            <button class="btn btn-success" style="width:100%;" onclick="confirmSave()">Confirm Save</button>
-        </div>
+        <!-- Save Panel Removed - using prompt instead -->
         
         <!-- Debug Console -->
         <div style="margin-top:auto; border-top:1px solid #ddd;">
@@ -223,14 +220,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 
     function saveTool() {
-        document.getElementById('save-panel').style.display = 'block';
+        const name = prompt("Enter a name for this new tool:");
+        if (name) {
+            submitSave(name);
+        }
     }
 
-    async function confirmSave() {
-        const name = document.getElementById('new-tool-name').value;
-        if (!name) return alert("Enter a tool name");
+    async function submitSave(name) {
+        if (!name) return;
 
-        const btn = document.querySelector('#save-panel button');
+        const btn = document.getElementById('btn-save');
         const oldText = btn.textContent;
         btn.textContent = 'Saving...';
         btn.disabled = true;
@@ -248,7 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             const data = await res.json();
             if (data.status === 'success') {
                 alert("Tool Saved Successfully!");
-                window.location.reload(); 
+                window.location.href = 'tool_studio.php'; 
             } else {
                 alert("Error: " + data.error);
             }
