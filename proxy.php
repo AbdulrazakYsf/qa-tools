@@ -2,6 +2,7 @@
 // proxy.php - A simple rewriting proxy for Tool Studio
 require_once 'auth_session.php';
 require_login();
+session_write_close(); // Unlock session to allow parallel proxy requests
 
 // Disable timeout for large assets
 set_time_limit(0);

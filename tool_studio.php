@@ -196,6 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
 
         if (msg.type === 'api-call') {
+            logDebug("Captured API: " + msg.payload.url);
             if (!isRecording) return;
             addStep(msg.payload);
         }

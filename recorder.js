@@ -94,9 +94,11 @@
         }
 
         const startTime = Date.now();
+        notifyParent('debug', { msg: 'Fetch Start', url: url.toString() });
 
         try {
             const response = await originalFetch.apply(this, args);
+            notifyParent('debug', { msg: 'Fetch Response', url: url.toString(), status: response.status });
 
             // Clone response to read body
             const clone = response.clone();
@@ -104,7 +106,9 @@
             try {
                 resBody = await clone.text();
                 try { resBody = JSON.parse(resBody); } catch (e) { }
-            } catch (e) { }
+            } catch (e) {
+                notifyParent('debug', { msg: 'Fetch Body Read Fail', url: url.toString() });
+            }
 
             // Notify (Log the ORIGINAL URL, not proxy url)
             // Filter: Only Jarir APIs
