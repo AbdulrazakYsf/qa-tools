@@ -83,6 +83,8 @@ if (stripos($contentType, 'text/html') !== false) {
     // Complex JS navigation (History API) will still update URL bar, 
     // but fetches are now hooked via recorder.js!
     
+    $recorderCode = file_get_contents(__DIR__ . '/recorder.js');
+
     $injection = "
     <script>
     (function() {
@@ -101,7 +103,7 @@ if (stripos($contentType, 'text/html') !== false) {
         });
     })();
     </script>
-    <script src='recorder.js'></script>
+    <script>{$recorderCode}</script>
     ";
 
     // Insert after <head>
