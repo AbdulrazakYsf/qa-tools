@@ -855,9 +855,13 @@ if (isset($_GET['api'])) {
             break;
 
           default:
-            // Temporary fallback for tools not yet migrated (will return empty or error)
-            echo json_encode(['error' => "Tool '$code' not yet migrated to API"]);
-            exit;
+            // Check for Custom Tool (JSON)
+            if (file_exists(__DIR__ . "/tools/custom/{$code}.json")) {
+                 $res = ToolRunner::run_custom(['tool_code' => $code]);
+            } else {
+                 echo json_encode(['error' => "Tool '$code' not supported via API."]);
+                 exit;
+            }
         }
 
         echo json_encode(['rows' => $res]);
@@ -2166,6 +2170,7 @@ try {
       <button class="tab-btn" data-tab="support">Support Center</button>
       <?php if ($currentUser['role'] === 'admin'): ?>
         <button class="tab-btn" data-tab="tools">Tools</button>
+        <button class="tab-btn" onclick="window.location.href='tool_studio.php'">Tool Studio <sup>NEW</sup></button>
         <button class="tab-btn" data-tab="api">API Access</button>
       <?php endif; ?>
     </div>

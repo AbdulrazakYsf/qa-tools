@@ -176,9 +176,14 @@ try {
             break;
 
         default:
-            http_response_code(404);
-            echo json_encode(['error' => "Tool '$toolCode' not supported via API."]);
-            exit;
+            // Check for Custom Tool (JSON)
+            if (file_exists(__DIR__ . "/tools/custom/{$toolCode}.json")) {
+                 $result = ToolRunner::run_custom(['tool_code' => $toolCode]);
+            } else {
+                http_response_code(404);
+                echo json_encode(['error' => "Tool '$toolCode' not supported via API."]);
+                exit;
+            }
     }
 
     // 4. Response

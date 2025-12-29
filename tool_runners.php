@@ -1093,5 +1093,65 @@ class ToolRunner
         }
         return $out;
     }
+    /* ---------- 16. Custom Tool Runner ---------- */
+    public static function run_custom($input)
+    {
+        $code = $input['tool_code'] ?? '';
+        $file = __DIR__ . "/tools/custom/{$code}.json";
+        
+        if (!file_exists($file)) {
+             return ['status' => 'ERROR', 'message' => "Tool definition not found for '$code'"];
+        }
+
+        $steps = json_decode(file_get_contents($file), true) ?? [];
+        $report = [];
+        $failed = false;
+
+        foreach ($steps as $index => $step) {
+            $url = $step['url'];
+            $method = $step['method'];
+            $reqHeaders = $step['requestHeaders'] ?? [];
+            $reqBody = $step['requestBody'] ?? null;
+            
+            // Clean Headers (Host, Origin, etc might cause issues if mismatched, let curl handle)
+            // But we might want some (e.g. Auth). 
+            // For now, let's keep Content-Type and Auth.
+            $cleanHeaders = [];
+            foreach ($reqHeaders as $k => $v) {
+                if (stripos($k, 'content-type') !== false || stripos($k, 'authorization') !== false || stripos($k, 'cookie') !== false) {
+                     $cleanHeaders[] = "$k: $v";
+                }
+            }
+
+            $res = self::request($method, $url, $cleanHeaders, $reqBody);
+            
+            // Validation: Default is 2xx = OK
+            $isOk = $res['ok'];
+            
+            $report[] = [
+                'step' => $index + 1,
+                'method' => $method,
+                'url' => $url,
+                'status' => $isOk ? 'OK' : 'FAIL',
+                'http_code' => $res['status'],
+                'timing' => $res['timing'],
+                'error' => $res['error']
+            ];
+
+            if (!$isOk) {
+                // Highlight last
+                $failed = true;
+                $report[count($report)-1]['highlight'] = true;
+                $report[count($report)-1]['response_body'] = $res['raw_body']; // Save full body for debug
+                break;
+            }
+        }
+        
+        return [
+            'status' => $failed ? 'Fail' : 'Done',
+            'steps_executed' => count($report),
+            'details' => $report
+        ];
+    }
 }
 ?>

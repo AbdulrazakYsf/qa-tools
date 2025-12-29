@@ -179,6 +179,7 @@ Internal use only - Jarir.com QA Team
 
 ## Version History
 
+- **v2.7.0** - Beta Release: **Tool Studio** - In-App Browser & API Recorder for creating custom tools.
 - **v2.6.0** - Stable Release: Tools Administration (Visibility Control), Secure Public API (Strict Mode), Redesigned Configuration UI, and self-healing DB schema.
 - **v2.5.0** - Stable Release: Complete AWS Migration, GitHub Actions CI/CD, and comprehensive documentation.
 - **v2.4.0** - Stable Release: API enhancements (API Key in Body support), `.htaccess` fixes for Authorization headers.
