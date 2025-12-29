@@ -103,17 +103,19 @@
             // Clone response to read body
             const clone = response.clone();
             let resBody = null;
+            let isReadable = true;
             try {
                 resBody = await clone.text();
                 try { resBody = JSON.parse(resBody); } catch (e) { }
             } catch (e) {
-                notifyParent('debug', { msg: 'Fetch Body Read Fail', url: url.toString() });
+                notifyParent('debug', { msg: 'Skipping API - Response Not Readable', url: url.toString(), error: e.toString() });
+                isReadable = false;
             }
 
             // Notify (Log the ORIGINAL URL, not proxy url)
-            // Filter: Only Jarir APIs
+            // Filter: Only Jarir APIs AND Readable Response
             const urlStr = url.toString();
-            if (urlStr.includes('jarir.com') || urlStr.includes('/api/')) {
+            if (isReadable && (urlStr.includes('jarir.com') || urlStr.includes('/api/'))) {
                 notifyParent('api-call', {
                     type: 'fetch',
                     url: urlStr,
@@ -177,16 +179,20 @@
 
         this.addEventListener('loadend', function () {
             let resBody = self.response;
+            let isReadable = true;
             try {
                 if (self.responseType === '' || self.responseType === 'text') {
                     try { resBody = JSON.parse(self.responseText); } catch (e) { resBody = self.responseText; }
                 }
-            } catch (e) { }
+            } catch (e) {
+                notifyParent('debug', { msg: 'Skipping API - XHR Response Not Readable', url: (self._reqData ? self._reqData.originalUrl : 'unknown').toString(), error: e.toString() });
+                isReadable = false;
+            }
 
-            // Filter: Only Jarir APIs
+            // Filter: Only Jarir APIs AND Readable
             const urlStr = (self._reqData ? self._reqData.originalUrl : 'unknown').toString();
 
-            if (urlStr.includes('jarir.com') || urlStr.includes('/api/')) {
+            if (isReadable && (urlStr.includes('jarir.com') || urlStr.includes('/api/'))) {
                 notifyParent('api-call', {
                     type: 'xhr',
                     url: urlStr,
