@@ -102,46 +102,48 @@
 
             // Clone response to read body
             const clone = response.clone();
-            let resBody = null;
-            let isReadable = true;
-            try {
-                resBody = await clone.text();
-                try { resBody = JSON.parse(resBody); } catch (e) { }
-            } catch (e) {
-                notifyParent('debug', { msg: 'Skipping API - Response Not Readable', url: url.toString(), error: e.toString() });
-                isReadable = false;
-            }
 
-            // Notify (Log the ORIGINAL URL, not proxy url)
-            // Filter: Only Jarir APIs AND Readable Response
-            // Notify (Log the ORIGINAL URL, not proxy url)
-            // Filter: Only Jarir APIs AND Readable Response
-            // Resolve to absolute to catch relative paths that are actually Jarir APIs
-            let fullUrl = urlStr;
-            try {
-                fullUrl = new URL(urlStr, document.baseURI).href;
-            } catch (e) { }
+            // Read body and log ASYNCHRONOUSLY to avoid blocking the app
+            (async () => {
+                let resBody = null;
+                let isReadable = true;
+                try {
+                    resBody = await clone.text();
+                    try { resBody = JSON.parse(resBody); } catch (e) { }
+                } catch (e) {
+                    notifyParent('debug', { msg: 'Skipping API - Response Not Readable', url: url.toString(), error: e.toString() });
+                    isReadable = false;
+                }
 
-            // Broaden filter: jarir.com, /api/, graphql, or .json (common in Magento/PWA)
-            if (isReadable && (
-                fullUrl.includes('jarir.com') ||
-                fullUrl.includes('/api/') ||
-                fullUrl.includes('graphql') ||
-                fullUrl.includes('/rest/')
-            )) {
-                notifyParent('api-call', {
-                    type: 'fetch',
-                    url: fullUrl,
-                    method: method,
-                    requestHeaders: headers,
-                    requestBody: body,
-                    status: response.status,
-                    responseBody: resBody,
-                    duration: Date.now() - startTime
-                });
-            } else {
-                notifyParent('debug', { msg: 'Filtered Fetch', url: fullUrl });
-            }
+                // Notify (Log the ORIGINAL URL, not proxy url)
+                // Filter: Only Jarir APIs AND Readable Response
+                // Resolve to absolute to catch relative paths that are actually Jarir APIs
+                let fullUrl = url.toString();
+                try {
+                    fullUrl = new URL(url.toString(), document.baseURI).href;
+                } catch (e) { }
+
+                // Broaden filter: jarir.com, /api/, graphql, or .json (common in Magento/PWA)
+                if (isReadable && (
+                    fullUrl.includes('jarir.com') ||
+                    fullUrl.includes('/api/') ||
+                    fullUrl.includes('graphql') ||
+                    fullUrl.includes('/rest/')
+                )) {
+                    notifyParent('api-call', {
+                        type: 'fetch',
+                        url: fullUrl,
+                        method: method,
+                        requestHeaders: headers,
+                        requestBody: body,
+                        status: response.status,
+                        responseBody: resBody,
+                        duration: Date.now() - startTime
+                    });
+                } else {
+                    notifyParent('debug', { msg: 'Filtered Fetch', url: fullUrl });
+                }
+            })();
 
             return response;
         } catch (err) {
