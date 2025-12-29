@@ -129,6 +129,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <input type="text" id="new-tool-name" placeholder="Tool Name (e.g. Checkout Flow)" style="width:100%; padding:8px; margin-bottom:5px; border:1px solid #ddd; border-radius:4px;">
             <button class="btn btn-success" style="width:100%;" onclick="confirmSave()">Confirm Save</button>
         </div>
+        
+        <!-- Debug Console -->
+        <div style="margin-top:auto; border-top:1px solid #ddd;">
+            <div onclick="toggleDebug()" style="padding:8px; background:#ddd; cursor:pointer; font-size:11px; font-weight:bold;">
+                â–¶ DEBUG CONSOLE (<span id="debug-status">Waiting...</span>)
+            </div>
+            <div id="debug-panel" style="height:150px; overflow-y:auto; background:#333; color:#0f0; padding:5px; font-family:monospace; font-size:10px; display:none;">
+                <div>> Initializing...</div>
+            </div>
+        </div>
     </div>
     <div class="browser-container">
         <iframe id="browser-frame" src="about:blank"></iframe>
@@ -140,19 +150,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     let recordedSteps = [];
     const browser = document.getElementById('browser-frame');
     const urlInput = document.getElementById('url-input');
+    const debugPanel = document.getElementById('debug-panel');
+
+    function logDebug(msg) {
+        const d = document.createElement('div');
+        d.textContent = '> ' + msg;
+        debugPanel.appendChild(d);
+        debugPanel.scrollTop = debugPanel.scrollHeight;
+    }
+    
+    function toggleDebug() {
+        const p = document.getElementById('debug-panel');
+        p.style.display = p.style.display === 'none' ? 'block' : 'none';
+    }
 
     function browse() {
         const url = urlInput.value;
         if (!url) return;
-        // Load via Proxy
         browser.src = 'proxy.php?url=' + encodeURIComponent(url);
     }
 
     function toggleRecord() {
         isRecording = !isRecording;
         document.getElementById('rec-dot').style.display = isRecording ? 'inline-block' : 'none';
-        document.getElementById('btn-record').textContent = isRecording ? '⏹ Stop' : '⏺ Record';
-        document.getElementById('btn-record').classList.toggle('btn-danger'); // Red when failing? No, Red is Standard Rec
+        document.getElementById('btn-record').textContent = isRecording ? 'â¹ Stop' : 'âº Record';
+        // document.getElementById('btn-record').classList.toggle('btn-danger');
         if (!isRecording) {
             document.getElementById('btn-save').disabled = recordedSteps.length === 0;
         }
@@ -163,12 +185,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         const msg = e.data;
         if (msg.source !== 'tool-studio-recorder') return;
 
+        if (msg.type === 'recorder-ready') {
+            document.getElementById('debug-status').textContent = 'Connected';
+            document.getElementById('debug-status').style.color = 'green';
+            logDebug("Recorder Injected Successfully: " + msg.payload.url);
+        }
+
+        if (msg.type === 'debug') {
+            logDebug((msg.payload.msg || '') + ' ' + (msg.payload.url || '') + ' ' + (msg.payload.error || ''));
+        }
+
         if (msg.type === 'api-call') {
             if (!isRecording) return;
-            // Filter junk? (images, css if captured) - Recorder tries to filter, but let's be safe
-            // Let's only keep JSON/APIs or specific patterns if needed.
-            // For now, capture ALL XHR/Fetch
-            
             addStep(msg.payload);
         }
     });

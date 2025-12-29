@@ -106,15 +106,8 @@ if (stripos($contentType, 'text/html') !== false) {
     <script>{$recorderCode}</script>
     ";
 
-    // Insert after <head>
-    $response = str_ireplace('<head>', '<head>' . $baseTag, $response);
-    
-    // Insert before </body>
-    if (strpos($response, '</body>') !== false) {
-        $response = str_ireplace('</body>', $injection . '</body>', $response);
-    } else {
-        $response .= $injection;
-    }
+    // Insert after <head> to run BEFORE other scripts
+    $response = str_ireplace('<head>', '<head>' . $baseTag . $injection, $response);
     
     echo $response;
 

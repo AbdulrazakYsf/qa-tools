@@ -4,8 +4,10 @@
     if (window.__recorderInjected) return;
     window.__recorderInjected = true;
 
+    // Send Heartbeat to Parent
+    notifyParent('recorder-ready', { url: window.location.href });
+
     // Determine Proxy Endpoint (relative to current location)
-    // If we are at /QA-TOOLS/proxy.php, the endpoint is same.
     const PROXY_ENDPOINT = 'proxy.php';
 
     // Helper: Is this a URL we should proxy? (i.e. not local)
@@ -19,11 +21,15 @@
     }
 
     function createProxyUrl(targetUrl) {
-        // Resolve relative URLs against the document base (which is effectively the target site due to <base>)
-        // But wait, if we are in proxy.php, document.baseURI might be the target.
-        // Let's resolve absolute first.
-        const resolved = new URL(targetUrl, document.baseURI).href;
-        return PROXY_ENDPOINT + '?url=' + encodeURIComponent(resolved) + '&mode=native';
+        try {
+            // Resolve relative URLs against the document base (which is effectively the target site due to <base>)
+            // But wait, if we are in proxy.php, document.baseURI might be the target.
+            // Let's resolve absolute first.
+            const resolved = new URL(targetUrl, document.baseURI).href;
+            return PROXY_ENDPOINT + '?url=' + encodeURIComponent(resolved) + '&mode=native';
+        } catch (e) {
+            return targetUrl;
+        }
     }
 
     // Helper to post message to parent
@@ -52,6 +58,9 @@
         const method = (config && config.method) ? config.method.toUpperCase() : 'GET';
         const body = (config && config.body) ? config.body : null;
         const headers = (config && config.headers) ? config.headers : {};
+
+        // Log Raw Attempt
+        notifyParent('debug', { msg: 'Fetch Attempt', url: url.toString() });
 
         // REWRITE URL TO PROXY
         if (shouldProxy(url)) {
@@ -98,16 +107,22 @@
             } catch (e) { }
 
             // Notify (Log the ORIGINAL URL, not proxy url)
-            notifyParent('api-call', {
-                type: 'fetch',
-                url: url.toString(), // Log the real URL
-                method: method,
-                requestHeaders: headers,
-                requestBody: body,
-                status: response.status,
-                responseBody: resBody,
-                duration: Date.now() - startTime
-            });
+            // Filter: Only Jarir APIs
+            const urlStr = url.toString();
+            if (urlStr.includes('jarir.com') || urlStr.includes('/api/')) {
+                notifyParent('api-call', {
+                    type: 'fetch',
+                    url: urlStr,
+                    method: method,
+                    requestHeaders: headers,
+                    requestBody: body,
+                    status: response.status,
+                    responseBody: resBody,
+                    duration: Date.now() - startTime
+                });
+            } else {
+                notifyParent('debug', { msg: 'Filtered Fetch', url: urlStr });
+            }
 
             return response;
         } catch (err) {
@@ -164,19 +179,31 @@
                 }
             } catch (e) { }
 
-            notifyParent('api-call', {
-                type: 'xhr',
-                url: self._reqData ? self._reqData.originalUrl : 'unknown',
-                method: self._reqData ? self._reqData.method : 'GET',
-                requestHeaders: self._reqData ? self._reqData.requestHeaders : {},
-                requestBody: self._reqData ? self._reqData.body : null,
-                status: self.status,
-                responseBody: resBody,
-                duration: Date.now() - startTime
-            });
+            // Filter: Only Jarir APIs
+            const urlStr = (self._reqData ? self._reqData.originalUrl : 'unknown').toString();
+
+            if (urlStr.includes('jarir.com') || urlStr.includes('/api/')) {
+                notifyParent('api-call', {
+                    type: 'xhr',
+                    url: urlStr,
+                    method: self._reqData ? self._reqData.method : 'GET',
+                    requestHeaders: self._reqData ? self._reqData.requestHeaders : {},
+                    requestBody: self._reqData ? self._reqData.body : null,
+                    status: self.status,
+                    responseBody: resBody,
+                    duration: Date.now() - startTime
+                });
+            } else {
+                notifyParent('debug', { msg: 'Filtered XHR', url: urlStr });
+            }
         });
 
         return originalSend.apply(this, arguments);
+    };
+
+    // Capture Global Errors
+    window.onerror = function (msg, url, line) {
+        notifyParent('debug', { msg: 'JS Error', error: msg, location: url + ':' + line });
     };
 
 })();
