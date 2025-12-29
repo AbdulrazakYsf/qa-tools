@@ -3,16 +3,31 @@ require_once 'auth_session.php';
 require_login();
 $currentUser = current_user();
 
-// Handle Save Logic via POST
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_tool') {
+// Handle Save Logic via POST (API Endpoint)
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Start output buffering to catch any stray warnings/notices
+    ob_start();
     header('Content-Type: application/json');
+
     try {
         require_role(['admin', 'tester']);
-        $input = json_decode(file_get_contents('php://input'), true);
+
+        $rawInput = file_get_contents('php://input');
+        $input = json_decode($rawInput, true);
+
+        if (!$input) {
+            throw new Exception("Invalid JSON received");
+        }
+
+        if (!isset($input['action']) || $input['action'] !== 'save_tool') {
+             throw new Exception("Invalid Action");
+        }
         
-        $name = $input['name'];
+        $name = $input['name'] ?? '';
+        if (!$name) throw new Exception("Tool Name is required");
+
         $code = strtolower(str_replace(' ', '_', $name));
-        $steps = $input['steps'];
+        $steps = $input['steps'] ?? [];
 
         // Save to DB
         $db = get_db_auth();
@@ -26,13 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
              $stmt->execute([$code, $name]);
         }
         
-        // 2. Save Steps (For now, we might need a new table `qa_tool_steps` or just save as JSON in `qa_tools`?)
-        // The user didn't specify DB schema changes, but we need to store the "Tool Sequence".
-        // Let's add a `configuration` or `script` column to `qa_tools`.
-        // Or create a file in `tools/custom_tools/`.
-        // Let's use a File-based approach for the "Runner" since `dashboard.php` loads PHP/HTML files.
-        // We will generate a `.json` file for the steps, and a `.html` wrapper.
-        
+        // 2. Save Steps
         if (!is_dir(__DIR__ . '/tools/custom')) {
             mkdir(__DIR__ . '/tools/custom', 0755, true);
         }
@@ -51,16 +60,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             // Call generic runner
             runCustomSequence('{$code}');
         };
-        // Auto-run if requested?
-        // window.startCustomTool();
     </script>
 </div>
 ";
         file_put_contents(__DIR__ . "/tools/{$code}.html", $htmlContent);
 
+        // Clear any previous output (e.g. notices)
+        ob_end_clean();
         echo json_encode(['status' => 'success']);
+
     } catch (Exception $e) {
-        echo json_encode(['error' => $e->getMessage()]);
+        // Clear any previous output
+        ob_end_clean();
+        http_response_code(500);
+        echo json_encode(['status' => 'error', 'error' => $e->getMessage()]);
     }
     exit;
 }
