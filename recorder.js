@@ -114,11 +114,24 @@
 
             // Notify (Log the ORIGINAL URL, not proxy url)
             // Filter: Only Jarir APIs AND Readable Response
-            const urlStr = url.toString();
-            if (isReadable && (urlStr.includes('jarir.com') || urlStr.includes('/api/'))) {
+            // Notify (Log the ORIGINAL URL, not proxy url)
+            // Filter: Only Jarir APIs AND Readable Response
+            // Resolve to absolute to catch relative paths that are actually Jarir APIs
+            let fullUrl = urlStr;
+            try {
+                fullUrl = new URL(urlStr, document.baseURI).href;
+            } catch (e) { }
+
+            // Broaden filter: jarir.com, /api/, graphql, or .json (common in Magento/PWA)
+            if (isReadable && (
+                fullUrl.includes('jarir.com') ||
+                fullUrl.includes('/api/') ||
+                fullUrl.includes('graphql') ||
+                fullUrl.includes('/rest/')
+            )) {
                 notifyParent('api-call', {
                     type: 'fetch',
-                    url: urlStr,
+                    url: fullUrl,
                     method: method,
                     requestHeaders: headers,
                     requestBody: body,
@@ -127,7 +140,7 @@
                     duration: Date.now() - startTime
                 });
             } else {
-                notifyParent('debug', { msg: 'Filtered Fetch', url: urlStr });
+                notifyParent('debug', { msg: 'Filtered Fetch', url: fullUrl });
             }
 
             return response;
@@ -190,12 +203,23 @@
             }
 
             // Filter: Only Jarir APIs AND Readable
+            // Filter: Only Jarir APIs AND Readable
             const urlStr = (self._reqData ? self._reqData.originalUrl : 'unknown').toString();
 
-            if (isReadable && (urlStr.includes('jarir.com') || urlStr.includes('/api/'))) {
+            let fullUrl = urlStr;
+            try {
+                fullUrl = new URL(urlStr, document.baseURI).href;
+            } catch (e) { }
+
+            if (isReadable && (
+                fullUrl.includes('jarir.com') ||
+                fullUrl.includes('/api/') ||
+                fullUrl.includes('graphql') ||
+                fullUrl.includes('/rest/')
+            )) {
                 notifyParent('api-call', {
                     type: 'xhr',
-                    url: urlStr,
+                    url: fullUrl,
                     method: self._reqData ? self._reqData.method : 'GET',
                     requestHeaders: self._reqData ? self._reqData.requestHeaders : {},
                     requestBody: self._reqData ? self._reqData.body : null,
@@ -204,7 +228,7 @@
                     duration: Date.now() - startTime
                 });
             } else {
-                notifyParent('debug', { msg: 'Filtered XHR', url: urlStr });
+                notifyParent('debug', { msg: 'Filtered XHR', url: fullUrl });
             }
         });
 
