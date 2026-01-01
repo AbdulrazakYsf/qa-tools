@@ -38,12 +38,23 @@ curl_setopt($ch, CURLOPT_HEADER, false); // We get headers separately or curl_ge
 
 // 1. Forward Request Headers
 $reqHeaders = [];
+$parsedUrl = parse_url($url);
+$targetOrigin = ($parsedUrl['scheme'] ?? 'https') . '://' . ($parsedUrl['host'] ?? '');
+
 foreach (getallheaders() as $key => $value) {
-    // Skip Host (let curl set it), Skip Content-Length (let curl recalc)
-    // Cookie is important
+    // Skip Host and Content-Length
     if (stripos($key, 'Host') !== false || stripos($key, 'Content-Length') !== false) continue;
+    
+    // Spoiler Origin and Referer to match target
+    if (stripos($key, 'Origin') !== false) continue;
+    if (stripos($key, 'Referer') !== false) continue;
+    
     $reqHeaders[] = "$key: $value";
 }
+
+// Force Spoofed Headers
+$reqHeaders[] = "Origin: $targetOrigin";
+$reqHeaders[] = "Referer: $targetOrigin/"; // Or use $url if needed, but root is safer for generic calls
 curl_setopt($ch, CURLOPT_HTTPHEADER, $reqHeaders);
 
 // 2. Forward Body (POST/PUT)
@@ -56,16 +67,48 @@ if ($method === 'POST' || $method === 'PUT' || $method === 'DELETE' || $method =
 // 3. User Agent Override (Consistency)
 // curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ToolStudio/1.0');
 
+// 4. Capture and Forward Response Headers
+$responseHeaders = [];
+curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($curl, $header) use (&$responseHeaders) {
+    $len = strlen($header);
+    $header = trim($header);
+    if (empty($header)) return $len; // Skip empty lines
+
+    $lower = strtolower($header);
+    // Forward critical headers
+    if (strpos($lower, 'set-cookie:') === 0 || 
+        strpos($lower, 'content-type:') === 0 ||
+        strpos($lower, 'location:') === 0 ||
+        strpos($lower, 'etag:') === 0 ||
+        strpos($lower, 'cache-control:') === 0 ||
+        strpos($lower, 'last-modified:') === 0) {
+        
+        // Rewrite cookie domains: Strip 'Domain=...' so cookies are set for current host
+        if (strpos($lower, 'set-cookie:') === 0) {
+            $header = preg_replace('/;\s*Domain=[^;]+/', '', $header);
+        }
+        
+        header($header, false); // false = allow multiple headers of same name (e.g. Set-Cookie)
+    }
+    
+    // Save Content-Type for later usage
+    if (strpos($lower, 'content-type:') === 0) {
+        $responseHeaders['content-type'] = substr($header, 13);
+    }
+    
+    return $len;
+});
+
 // Execute
 $response = curl_exec($ch);
-$contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-$finalUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$contentType = $responseHeaders['content-type'] ?? curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+$finalUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
 curl_close($ch);
 
-// Set Response Headers
+// Set Response Code
 http_response_code($httpCode);
-header("Content-Type: $contentType");
+// Content-Type is already forwarded by the loop above, but we kept it in $contentType for logic below.
 
 // Robust CORS Handling
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
