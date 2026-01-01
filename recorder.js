@@ -237,6 +237,37 @@
         return originalSend.apply(this, arguments);
     };
 
+    // 3. PerformanceObserver for Static Resources & Blocked Requests
+    // This catches what Fetch/XHR interceptors miss (images, scripts, CSS, 403s on assets)
+    try {
+        const observer = new PerformanceObserver((list) => {
+            list.getEntries().forEach((entry) => {
+                // Filter out proxy.php calls itself to avoid noise
+                if (entry.name.includes('proxy.php')) return;
+
+                // We only care about things that look like external resources or APIs
+                // that might have been missed by interceptors (e.g. Images, Scripts)
+                // However, fetch/XHR also trigger performance entries.
+                // We need to deduplicate or just log them as "Resource" type.
+                // For the "Network Tab" UI, duplicate is okay if we match by time,
+                // but let's just send everything and let UI handle it.
+
+                notifyParent('api-call', {
+                    type: 'resource',
+                    url: entry.name,
+                    method: 'GET', // Resources are usually GET
+                    status: 0, // PerformanceObserver doesn't give status code (security)
+                    duration: entry.duration,
+                    initiatorType: entry.initiatorType,
+                    transferSize: entry.transferSize || 0
+                });
+            });
+        });
+        observer.observe({ entryTypes: ['resource'] });
+    } catch (e) {
+        console.warn("PerformanceObserver not supported", e);
+    }
+
     // Capture Global Errors
     window.onerror = function (msg, url, line) {
         notifyParent('debug', { msg: 'JS Error', error: msg, location: url + ':' + line });
