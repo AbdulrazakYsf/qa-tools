@@ -157,6 +157,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     <div style="width:1px; height:20px; background:#ddd; margin:0 5px;"></div>
     
+    <button class="btn btn-light" title="Refresh Browser" onclick="refreshBrowser()">🔄</button>
+    <label style="font-size:12px; display:flex; align-items:center; gap:4px; cursor:pointer; user-select:none;">
+        <input type="checkbox" id="cors-toggle" checked> CORS Fix
+    </label>
+
+    <div style="width:1px; height:20px; background:#ddd; margin:0 5px;"></div>
+    
     <input type="text" id="url-input" class="url-bar" value="https://www.jarir.com" placeholder="Enter URL...">
     <button class="btn btn-primary" onclick="browse()">Go</button>
     
@@ -220,7 +227,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     function browse() {
         const url = urlInput.value;
         if (!url) return;
-        browser.src = 'proxy.php?url=' + encodeURIComponent(url);
+        const useCors = document.getElementById('cors-toggle').checked ? '1' : '0';
+        // Add timestamp to force reload if needed, or just standard navigation
+        // We use mode=native (though currently unused in proxy logic, good to keep)
+        browser.src = 'proxy.php?url=' + encodeURIComponent(url) + '&cors=' + useCors;
+    }
+    
+    function refreshBrowser() {
+        // Reload current frame
+        if (browser.contentWindow && browser.contentWindow.location.href !== 'about:blank') {
+             browser.contentWindow.location.reload();
+        } else {
+             browse(); // Fallback to fresh browse
+        }
     }
 
     function toggleRecord() {
