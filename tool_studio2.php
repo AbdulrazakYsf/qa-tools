@@ -127,11 +127,11 @@ function curl_fetch(array $req): array {
         CURLOPT_MAXREDIRS      => 5,
         CURLOPT_CONNECTTIMEOUT => CONNECT_TIMEOUT,
         CURLOPT_TIMEOUT        => TOTAL_TIMEOUT,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_SSL_VERIFYPEER => false, // Relaxed for QA
+        CURLOPT_SSL_VERIFYHOST => 0,     // Relaxed for QA
         CURLOPT_COOKIEJAR      => $cookieJar,
         CURLOPT_COOKIEFILE     => $cookieJar,
-        CURLOPT_USERAGENT      => 'Jarir-QA-ToolStudio/2.0 (+internal)',
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     ]);
 
     // Method handling
@@ -147,16 +147,24 @@ function curl_fetch(array $req): array {
 
     // Header allowlist pass-through (avoid dangerous ones)
     $safeHeaders = [];
+    
+    // SPOOF ORIGIN/REFERER
+    $p = parse_url($url);
+    $origin = ($p['scheme']??'https') . '://' . ($p['host']??'');
+    $safeHeaders[] = "Origin: $origin";
+    $safeHeaders[] = "Referer: $origin/";
+
     foreach ($headers as $k => $v) {
         $kn = strtolower((string)$k);
-        if (in_array($kn, ['host','content-length'], true)) continue;
+        if (in_array($kn, ['host','content-length','origin','referer'], true)) continue;
+        
         // Optionally allow Authorization for Jarir APIs
         if ($kn === 'authorization' || $kn === 'content-type' || $kn === 'accept' || $kn === 'x-requested-with') {
             $safeHeaders[] = $k . ': ' . $v;
             continue;
         }
         // keep some common headers
-        if (in_array($kn, ['accept-language','cache-control','pragma','referer','origin'], true)) {
+        if (in_array($kn, ['accept-language','cache-control','pragma'], true)) {
             $safeHeaders[] = $k . ': ' . $v;
         }
     }
